@@ -31,6 +31,7 @@
  * and keyvalue half of the write path.
  */
 import { children, get, pairs, parse } from "../kv/parse.js";
+import { assertWritableValue as assertKvValue } from "../kv/lex.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
 import { lineRange, pairRange } from "./select.js";
 import { applySplices } from "./splice.js";
@@ -169,6 +170,35 @@ function insertionPoint(block: KvBlock): number {
   return last;
 }
 
+function assertWritableValue(what: string, value: string): void {
+  try {
+    assertKvValue(what, value);
+  } catch (error) {
+    throw new VmfEditError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function validateOps(ops: readonly VmfOp[]): void {
+  for (const op of ops) {
+    if (op.op === "add") {
+      for (const [key, value] of Object.entries(op.keyvalues)) {
+        assertWritableValue(`add key ${JSON.stringify(key)}`, key);
+        assertWritableValue(`add value for ${JSON.stringify(key)}`, value);
+      }
+    }
+    if (op.op === "update") {
+      for (const [key, value] of Object.entries(op.set ?? {})) {
+        assertWritableValue(`update key ${JSON.stringify(key)}`, key);
+        assertWritableValue(`update value for ${JSON.stringify(key)}`, value);
+      }
+    }
+    if (op.op === "addOutput") {
+      assertWritableValue("output name", op.output);
+      assertWritableValue("output value", op.value);
+    }
+  }
+}
+
 function setPair(
   text: string,
   block: KvBlock,
@@ -213,6 +243,7 @@ function formatEntity(kv: Record<string, string>, id: number): string {
  * the tests assert byte for byte.
  */
 export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult {
+  validateOps(ops);
   const { nodes, entities } = readEntities(text);
   const splices: Splice[] = [];
   const appends: string[] = [];

@@ -104,6 +104,11 @@ function realpathOrSelf(p: string): string {
   }
 }
 
+/** Windows paths are case-insensitive, even when Steam manifests disagree on casing. */
+function pathKey(p: string): string {
+  return process.platform === "win32" ? p.toLowerCase() : p;
+}
+
 /**
  * Steam installation roots to try.
  *
@@ -112,13 +117,21 @@ function realpathOrSelf(p: string): string {
  * comparison finds every game twice.
  */
 export function steamRoots(env: NodeJS.ProcessEnv = process.env): string[] {
-  const home = env.HOME ?? homedir();
+  const home = env.HOME ?? env.USERPROFILE ?? homedir();
+  const windowsProgramFiles = [
+    env["ProgramFiles(x86)"],
+    env.ProgramFiles,
+    env.ProgramW6432,
+  ].filter((p): p is string => Boolean(p));
   const candidates = [
     env.STEAM_ROOT,
+    env.STEAM_PATH,
     join(home, ".steam", "steam"),
     join(home, ".steam", "root"),
     join(home, ".local", "share", "Steam"),
     join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+    ...windowsProgramFiles.map((p) => join(p, "Steam")),
+    env.LOCALAPPDATA ? join(env.LOCALAPPDATA, "Steam") : undefined,
   ].filter((c): c is string => Boolean(c));
 
   const seen = new Set<string>();
@@ -126,8 +139,8 @@ export function steamRoots(env: NodeJS.ProcessEnv = process.env): string[] {
   for (const c of candidates) {
     if (!existsSync(join(c, "steamapps"))) continue;
     const real = realpathOrSelf(c);
-    if (seen.has(real)) continue;
-    seen.add(real);
+    if (seen.has(pathKey(real))) continue;
+    seen.add(pathKey(real));
     out.push(real);
   }
   return out;
@@ -147,8 +160,8 @@ export function libraryPaths(steamRoot: string): string[] {
   const add = (p: string): void => {
     if (!existsSync(join(p, "steamapps"))) return;
     const real = realpathOrSelf(p);
-    if (seen.has(real)) return;
-    seen.add(real);
+    if (seen.has(pathKey(real))) return;
+    seen.add(pathKey(real));
     out.push(real);
   };
 
@@ -261,10 +274,10 @@ export function discoverSourceInstalls(env: NodeJS.ProcessEnv = process.env): So
   for (const steamRoot of steamRoots(env)) {
     for (const library of libraryPaths(steamRoot)) {
       for (const app of installedApps(library)) {
-        if (!app.gameRoot || seenRoots.has(app.gameRoot)) continue;
+        if (!app.gameRoot || seenRoots.has(pathKey(app.gameRoot))) continue;
         const mods = modDirs(app.gameRoot);
         if (mods.length === 0) continue;
-        seenRoots.add(app.gameRoot);
+        seenRoots.add(pathKey(app.gameRoot));
 
         const bin = join(app.gameRoot, "bin");
         out.push({

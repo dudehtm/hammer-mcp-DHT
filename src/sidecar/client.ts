@@ -25,9 +25,15 @@ function scriptPath(): string {
   return fileURLToPath(new URL("../../sidecar/main.py", import.meta.url));
 }
 
-/** The interpreter of the venv `sidecar/setup.sh` builds, unless configured otherwise. */
+/** The interpreter of the venv created by the platform setup script, unless configured otherwise. */
 export function pythonPath(config: Config): string {
-  return config.sidecarPython ?? join(config.stateDir, "sidecar-venv", "bin", "python");
+  if (config.sidecarPython) return config.sidecarPython;
+  const executable = process.platform === "win32" ? ["Scripts", "python.exe"] : ["bin", "python"];
+  return join(config.stateDir, "sidecar-venv", ...executable);
+}
+
+function setupCommand(): string {
+  return process.platform === "win32" ? ".\\sidecar\\setup.ps1" : "./sidecar/setup.sh";
 }
 
 interface SidecarFault {
@@ -52,7 +58,7 @@ export async function callSidecar<T>(
   if (!existsSync(python)) {
     throw new SidecarError(
       `Python sidecar not installed: ${python} does not exist. ` +
-        `Run ./sidecar/setup.sh in hammer-mcp to create it.`,
+        `Run ${setupCommand()} in hammer-mcp to create it.`,
       "not_installed",
     );
   }

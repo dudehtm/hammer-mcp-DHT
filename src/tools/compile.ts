@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { clip } from "@projectsociety/mcp-core";
 import { z } from "zod";
@@ -9,12 +9,13 @@ import {
   chooseToolchain,
   compilerExe,
   runCompiler,
-  toWindowsPath,
+  toCompilerPath,
 } from "../compile/wine.js";
 import { readEntityLump } from "../bsp/entities.js";
 import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
 import { assertWritable } from "../fs/guard.js";
+import { writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
 import { gameBlock, gameFor } from "../games/resolve.js";
@@ -62,7 +63,7 @@ const STAGE_RESULT = z.object({
 export const runCompile = defineTool({
   name: "run_compile",
   description:
-    "Compiles a .vmf with vbsp, vvis and vrad under wine, and returns each stage's " +
+    "Compiles a .vmf with vbsp, vvis and vrad through the configured native or Wine backend, and returns each stage's " +
     "findings rather than its raw output. Takes minutes to hours: vvis on a large map " +
     "is the slow part, and -fast exists for iteration. Stops at the first stage that " +
     "fails, because vvis and vrad results are meaningless after a leak. Run " +
@@ -72,6 +73,10 @@ export const runCompile = defineTool({
   meta: { "anthropic/requiresUserInteraction": true },
   inputSchema: {
     vmf: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
+    outputDir: z
+      .string()
+      .optional()
+      .describe("Optional staging directory for compiler outputs; the source VMF is copied there."),
     fast: z
       .boolean()
       .default(true)
@@ -99,6 +104,7 @@ export const runCompile = defineTool({
   },
   outputSchema: {
     vmf: z.string(),
+    sourceVmf: z.string(),
     /** The chain that actually ran, which is not always the one that was asked for. */
     toolchain: z.string(),
     /** What was asked for. Equal to `toolchain` unless the ++ chain was missing. */
@@ -127,9 +133,21 @@ export const runCompile = defineTool({
       throw new Error(`cull is a Hammer++ flag; pass toolchain: "plusplus" to use it`);
     }
 
-    const vmf = resolveVmfInput(args.vmf, ctx.config);
-    if (!existsSync(vmf)) throw new Error(`${vmf} does not exist`);
-    if (extname(vmf).toLowerCase() !== ".vmf") throw new Error(`${vmf} is not a .vmf`);
+    const sourceVmf = resolveVmfInput(args.vmf, ctx.config);
+    if (!existsSync(sourceVmf)) throw new Error(`${sourceVmf} does not exist`);
+    if (extname(sourceVmf).toLowerCase() !== ".vmf") throw new Error(`${sourceVmf} is not a .vmf`);
+
+    let vmf = sourceVmf;
+    if (args.outputDir !== undefined) {
+      const staged = assertWritable(
+        join(resolveInput(args.outputDir, ctx.config), basename(sourceVmf)),
+        ctx.config,
+      );
+      mkdirSync(dirname(staged), { recursive: true });
+      if (staged !== sourceVmf)
+        writeGuarded(staged, readFileSync(sourceVmf, "utf8"), ctx.config);
+      vmf = staged;
+    }
 
     // The compilers write the .bsp beside the source, so that is a write we own.
     const bsp = join(dirname(vmf), `${basename(vmf, ".vmf")}.bsp`);
@@ -141,8 +159,8 @@ export const runCompile = defineTool({
     if (profile.unusableForCompile) {
       throw new ToolchainError(`cannot compile against ${profile.id}: ${profile.unusableForCompile}`);
     }
-    const game = toWindowsPath(profile.gameDir ?? ctx.config.gmodGameDir);
-    const target = toWindowsPath(vmf);
+    const game = toCompilerPath(profile.gameDir ?? ctx.config.gmodGameDir, ctx.config.backend);
+    const target = toCompilerPath(vmf, ctx.config.backend);
     const timeoutMs = args.timeoutMinutes * 60_000;
 
     // Resolved against what is on disk, for the stages actually being run: asking for the
@@ -218,6 +236,7 @@ export const runCompile = defineTool({
 
     return {
       vmf,
+      sourceVmf,
       toolchain: chain,
       toolchainRequested: chosen.requested,
       toolchainNote: chosen.note,
@@ -604,9 +623,10 @@ export const runPack = defineTool({
     const listPath = join(ctx.config.stateDir, "bspzip-filelist.txt");
     assertWritable(listPath, ctx.config);
     mkdirSync(dirname(listPath), { recursive: true });
-    writeFileSync(
+    writeGuarded(
       listPath,
       files.flatMap((f) => [f.internal, resolveInput(f.source, ctx.config)]).join("\n") + "\n",
+      ctx.config,
     );
 
     const packChain = chooseToolchain(ctx.config, args.toolchain, ["bspzip"], packProfile);
@@ -616,11 +636,11 @@ export const runPack = defineTool({
       compilerExe("bspzip", packChain.chain),
       [
         "-game",
-        toWindowsPath(packProfile.gameDir ?? ctx.config.gmodGameDir),
+        toCompilerPath(packProfile.gameDir ?? ctx.config.gmodGameDir, ctx.config.backend),
         "-addlist",
-        toWindowsPath(bsp),
-        toWindowsPath(listPath),
-        toWindowsPath(bsp),
+        toCompilerPath(bsp, ctx.config.backend),
+        toCompilerPath(listPath, ctx.config.backend),
+        toCompilerPath(bsp, ctx.config.backend),
       ],
       600_000,
       packChain.chain,

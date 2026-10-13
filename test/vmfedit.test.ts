@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -220,6 +220,72 @@ describe("outputs", () => {
     ]);
     expect(r.text).not.toContain('"OnUser1" "a,Open,,0,-1"');
     expect(r.text).toContain('"OnUser1" "b,Open,,0,-1"');
+  });
+});
+
+describe("KeyValues text safety", () => {
+  it("rejects dangerous add, update and output text before creating splices", () => {
+    const text = readFileSync(PROBE, "utf8");
+    const cases = [
+      { op: "add", keyvalues: { 'bad"key': "value", classname: "info_target" } },
+      { op: "add", keyvalues: { classname: "info_target", value: "line\nbreak" } },
+      { op: "update", match: { classname: "light" }, set: { value: "line\rbreak" } },
+      {
+        op: "addOutput",
+        match: { classname: "light" },
+        output: "OnUse",
+        value: "target\"name,Open,,0,-1",
+      },
+      {
+        op: "addOutput",
+        match: { classname: "light" },
+        output: "OnUse",
+        value: "target,Open,,0,\0-1",
+      },
+    ];
+    for (const op of cases) {
+      expect(() => applyVmfOps(text, [op] as never)).toThrow(VmfEditError);
+    }
+  });
+
+  it("leaves the file, mtime and backup untouched when the tool rejects text", async () => {
+    const path = copyProbe("unsafe");
+    const before = readFileSync(path);
+    const mtime = statSync(path).mtimeMs;
+    expect(() =>
+      editVmf.handler(
+        {
+          path,
+          ops: [{ op: "add", keyvalues: { classname: "info_target", targetname: "bad\nname" } }],
+          dryRun: false,
+          backup: true,
+          confirm: true,
+        } as never,
+        ctx,
+      ),
+    ).toThrow(VmfEditError);
+    expect(readFileSync(path).equals(before)).toBe(true);
+    expect(statSync(path).mtimeMs).toBe(mtime);
+    expect(() => readFileSync(`${path}.bak`)).toThrow();
+  });
+
+  it("keeps literal backslashes and the ESC output separator valid", () => {
+    const text = readFileSync(PROBE, "utf8");
+    const result = applyVmfOps(text, [
+      {
+        op: "update",
+        match: { classname: "light" },
+        set: { model: "models\\props\\door.mdl" },
+      },
+      {
+        op: "addOutput",
+        match: { classname: "light" },
+        output: "OnUser1",
+        value: `target${"\u001b"}Open${"\u001b"}${"\u001b"}0${"\u001b"}-1`,
+      },
+    ]);
+    expect(result.text).toContain('"model" "models\\props\\door.mdl"');
+    expect(result.text).toContain(`"OnUser1" "target\u001bOpen\u001b\u001b0\u001b-1"`);
   });
 });
 

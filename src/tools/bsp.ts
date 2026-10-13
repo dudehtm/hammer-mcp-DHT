@@ -49,6 +49,7 @@ export const readBspInfo = defineTool({
     path: z.string(),
     ident: z.string(),
     version: z.number(),
+    layout: z.enum(["source", "l4d2"]),
     mapRevision: z
       .number()
       .describe("Copy this into a .lmp patch for this map, or the engine ignores it."),
@@ -84,6 +85,7 @@ export const readBspInfo = defineTool({
       path: header.path,
       ident: header.ident,
       version: header.version,
+      layout: header.layout,
       mapRevision: header.mapRevision,
       fileSize: header.fileSize,
       lumpCount: lumps.length,

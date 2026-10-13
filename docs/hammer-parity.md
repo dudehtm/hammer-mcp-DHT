@@ -18,7 +18,7 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 14/08/2026: **76 tools**.
+Last checked against the tool list on 12/10/2026: **78 tools**.
 
 ## The file itself
 
@@ -195,6 +195,8 @@ Thirty-eight of the tools here answer questions Hammer never asked. They are not
 | `read_fgd_class` | the entity dialog, one class at a time |
 | `read_vmf_solids` | the red "invalid solid" outline, and no reason |
 | `read_vmf_lint` | nothing |
+| `check_l4d2_map` | nothing: combines L4D2 marker review with FGD lint and I/O checks before compilation |
+| `check_l4d2_mission` | nothing: checks mission chapter references and add-on metadata before loading the campaign |
 | `write_vmf_fitting` | prefabs, which are a saved lump of geometry at whatever size somebody once drew it. Nothing in Hammer knows how tall a counter is |
 | `write_hint_brush` | a brush you texture yourself and hope |
 | `read_gma` | nothing: a Workshop archive is opaque |

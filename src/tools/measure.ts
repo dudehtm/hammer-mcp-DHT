@@ -9,8 +9,9 @@ import {
   readTree,
 } from "../bsp/trace.js";
 import { defineTool } from "../mcp/registry.js";
+import { gameBlock, gameFor } from "../games/resolve.js";
 import { callSidecar } from "../sidecar/client.js";
-import { resolveInput } from "./paths.js";
+import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 
 const VEC3 = z.array(z.number()).length(3);
 
@@ -59,9 +60,10 @@ export const readMapGeometry = defineTool({
   name: "read_map_geometry",
   description:
     "What each lump of a compiled map holds, and how close that is to the compiler's " +
-    "ceiling. Reads only the 1036-byte directory, so it is instant. Limits are vbsp's own, " +
-    "from source-sdk-2013; a map that exceeds one is a map whose compilers raised it, not " +
-    "a broken map. Use it to see what stops a map from growing before planning work on it.",
+    "ceiling. Reads only the 1036-byte directory, so it is instant. It applies limits only " +
+    "when they are verified for the selected engine branch; L4D2 currently reports structural " +
+    "sizes without borrowing SDK 2013 ceilings. Use it to see what stops a map from growing " +
+    "before planning work on it.",
   realm: "map",
   inputSchema: {
     path: z.string().describe("Path to the .bsp, absolute or relative to the repo root."),
@@ -69,13 +71,18 @@ export const readMapGeometry = defineTool({
       .boolean()
       .default(false)
       .describe("Return only the lumps at or above 80% of their ceiling."),
+    game: GAME,
   },
   outputSchema: {
+    game: GAME_BLOCK,
     path: z.string(),
     version: z.number(),
+    layout: z.enum(["source", "l4d2"]),
+    branch: z.string(),
+    limitsVerified: z.boolean(),
     mapRevision: z.number(),
     fileSize: z.number(),
-    limitSource: z.string(),
+    limitSource: z.string().nullable(),
     lumps: z.array(
       z.object({
         index: z.number(),
@@ -92,13 +99,18 @@ export const readMapGeometry = defineTool({
     nearLimitCount: z.number(),
   },
   handler: (args, ctx) => {
-    const g = readGeometry(resolveInput(args.path, ctx.config));
+    const { game, from } = gameFor(ctx.config, args.game);
+    const g = readGeometry(resolveInput(args.path, ctx.config), { branch: game.branch });
     return {
+      game: gameBlock(game, from),
       path: g.header.path,
       version: g.header.version,
+      layout: g.header.layout,
+      branch: g.branch,
+      limitsVerified: g.limitsVerified,
       mapRevision: g.header.mapRevision,
       fileSize: g.header.fileSize,
-      limitSource: "source-sdk-2013 src/public/bspfile.h, read 11/08/2026",
+      limitSource: g.limitSource,
       lumps: args.nearLimitOnly ? g.nearLimit : g.lumps,
       nearLimitCount: g.nearLimit.length,
     };

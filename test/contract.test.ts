@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { Config } from "../src/config.js";
-import { assertWritable, FORBIDDEN_TREES, WriteRefused } from "../src/fs/guard.js";
+import {
+  assertWritable,
+  FORBIDDEN_TREES,
+  WriteOutsideRoots,
+  WriteRefused,
+} from "../src/fs/guard.js";
 import { isCallAllowed, ToolRegistry } from "../src/mcp/registry.js";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { writeVmfSolidTool } from "../src/tools/build.js";
@@ -85,6 +90,14 @@ describe("write guard", () => {
 
   it("refuses the forbidden tree itself, not only paths under it", () => {
     expect(() => assertWritable(join(REPO, "srcds"), CONFIG)).toThrow(WriteRefused);
+  });
+
+  it("honours deployment-specific write roots when configured", () => {
+    const restricted = { ...CONFIG, writeRoots: ["maps/src", "build"] } as Config;
+    expect(() => assertWritable(join(REPO, "maps", "src", "probe.bsp"), restricted)).not.toThrow();
+    expect(() => assertWritable(join(REPO, "game", "left4dead2", "probe.bsp"), restricted)).toThrow(
+      WriteOutsideRoots,
+    );
   });
 
   /**

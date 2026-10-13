@@ -1,4 +1,4 @@
-import { readAt, readHeader, requireLump } from "./header.js";
+import { readAt, readHeader, requireUncompressedLump } from "./header.js";
 import type { BspHeader } from "./header.js";
 import type { Vec3 } from "../entity/model.js";
 
@@ -47,9 +47,9 @@ export interface BspTree {
 export function readTree(path: string): BspTree {
   const header = readHeader(path);
 
-  const planesLump = requireLump(header, LUMP_PLANES);
-  const nodesLump = requireLump(header, LUMP_NODES);
-  const leafsLump = requireLump(header, LUMP_LEAFS);
+  const planesLump = requireUncompressedLump(header, LUMP_PLANES);
+  const nodesLump = requireUncompressedLump(header, LUMP_NODES);
+  const leafsLump = requireUncompressedLump(header, LUMP_LEAFS);
 
   if (leafsLump.version !== 1) {
     // Version 0 carries a 24-byte CompressedLightCube per leaf and is 56 bytes wide.

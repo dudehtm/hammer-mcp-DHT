@@ -37,6 +37,12 @@ export const readGameContentTool = defineTool({
           "Garry's Mod install holds tens of thousands, and parsing them all to answer one " +
           "search would cost seconds.",
       ),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe("Stable result offset. Use with limit to page through a broad search."),
     limit: z.number().int().min(1).max(1000).default(100),
     game: GAME,
   },
@@ -47,6 +53,8 @@ export const readGameContentTool = defineTool({
     mountError: z.string().nullable(),
     pattern: z.string(),
     kind: z.string(),
+    offset: z.number(),
+    limit: z.number(),
     /** Every match, not only those returned. */
     total: z.number(),
     shown: z.number().optional(),
@@ -95,6 +103,7 @@ export const readGameContentTool = defineTool({
         gameDir: game.gameDir,
         pattern: args.pattern,
         kind: args.kind,
+        offset: args.offset,
         limit: args.limit,
         ...(args.details !== undefined ? { details: args.details } : {}),
       },

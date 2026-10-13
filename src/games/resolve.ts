@@ -102,7 +102,7 @@ export function gameFor(
   id?: string,
 ): { game: ResolvedGame; from: "argument" | "config" } {
   const games = allGames(config);
-  const wanted = id ?? config.game ?? "gmod";
+  const wanted = id ?? config.game ?? "l4d2";
   const game = games[wanted];
   if (!game) throw new UnknownGameError(wanted, Object.keys(games).sort());
   return { game, from: id ? "argument" : "config" };

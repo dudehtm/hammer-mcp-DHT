@@ -13,6 +13,7 @@ import { gameTools } from "./games.js";
 import { healthTools } from "./health.js";
 import { hollowTools } from "./hollow.js";
 import { lightmapTools } from "./lightmap.js";
+import { l4d2Tools } from "./l4d2.js";
 import { lmpTools } from "./lmp.js";
 import { materialsTools } from "./materials.js";
 import { measureTools } from "./measure.js";
@@ -43,6 +44,7 @@ export const allTools: AnyToolDef[] = [
   ...measureTools,
   ...materialsTools,
   ...lightmapTools,
+  ...l4d2Tools,
   ...visleafTools,
   ...reportTools,
   ...vmfTools,

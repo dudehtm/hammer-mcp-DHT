@@ -4,7 +4,7 @@ import { parseConnection } from "../entity/wiring.js";
 import type { WirableEntity } from "../entity/wiring.js";
 import { parse } from "../kv/parse.js";
 import type { KvBlock } from "../kv/parse.js";
-import { LUMP_ENTITIES, readAt, readHeader, requireLump } from "./header.js";
+import { LUMP_ENTITIES, readAt, readHeader, requireUncompressedLump } from "./header.js";
 import type { BspHeader } from "./header.js";
 
 export interface EntityLump {
@@ -24,7 +24,7 @@ export interface EntityLump {
  */
 export function readEntityLump(path: string): EntityLump {
   const header = readHeader(path);
-  const lump = requireLump(header, LUMP_ENTITIES);
+  const lump = requireUncompressedLump(header, LUMP_ENTITIES);
   const raw = readAt(path, lump.offset, lump.length);
 
   const nulTerminated = raw.length > 0 && raw[raw.length - 1] === 0;

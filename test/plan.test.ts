@@ -86,6 +86,38 @@ describe("fitPage", () => {
 });
 
 describe("buildPlan", () => {
+  it("keeps the fine analysis resolution for a small map", () => {
+    expect(plan.analysisStep).toBe(16);
+  });
+
+  it("coarsens a large map only when the automatic fine grid exceeds its budget", () => {
+    const large = buildScene(
+      "large.vmf",
+      insertSolids(
+        SEEDTEXT,
+        [{ shape: "box", mins: [-4096, -4096, 0], maxs: [4096, 4096, 1024] }],
+        { material: "DEV/DEV_MEASUREGENERIC01" },
+      ).text,
+    );
+    const adapted = buildPlan(large, [[0, 0, 512]]);
+    expect(adapted.analysisStep).toBe(32);
+    expect(adapted.notes.join(" ")).toMatch(/adapted from 16 to 32/);
+  });
+
+  it("refuses an unsupported or over-budget explicit analysis resolution", () => {
+    expect(() => buildPlan(scene, [SEED], { analysisStep: 20 })).toThrow(/choose one of 16, 32, 64/);
+
+    const large = buildScene(
+      "large-explicit.vmf",
+      insertSolids(
+        SEEDTEXT,
+        [{ shape: "box", mins: [-4096, -4096, 0], maxs: [4096, 4096, 1024] }],
+        { material: "DEV/DEV_MEASUREGENERIC01" },
+      ).text,
+    );
+    expect(() => buildPlan(large, [[0, 0, 512]], { analysisStep: 16 })).toThrow(/cannot fit/);
+  });
+
   it("draws every brush the cut passes through, and no others", () => {
     // The invariant: the area of what was drawn equals the area of the sections, computed
     // separately. A version that drew bounding boxes instead of sections passes every other

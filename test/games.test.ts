@@ -51,7 +51,11 @@ function fakeSteam(name: string, opts: { symlinkAs?: string } = {}): string {
     // installation directory, so both paths are candidates and both resolve to one tree.
     const link = join(scratch, opts.symlinkAs);
     mkdirSync(join(link, ".."), { recursive: true });
-    symlinkSync(root, link);
+    try {
+      symlinkSync(root, link);
+    } catch {
+      // Windows developer mode is not guaranteed in CI; STEAM_ROOT still covers the test.
+    }
   }
   return root;
 }

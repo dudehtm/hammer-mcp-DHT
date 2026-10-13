@@ -24,10 +24,58 @@ export function toWindowsPath(path: string): string {
   return `Z:${path.replace(/\//g, "\\")}`;
 }
 
+/** Absolute path form expected by the selected native or Wine process. */
+export function toCompilerPath(path: string, backend: Config["backend"]): string {
+  if (backend === "native") {
+    if (!isAbsolute(path)) {
+      throw new ToolchainError(`${path}: the Source compilers need an absolute path`);
+    }
+    return path;
+  }
+  return toWindowsPath(path);
+}
+
 export interface CompilerRun extends RunResult {
   command: string;
   args: string[];
   durationMs: number;
+}
+
+export interface BackendRunOptions {
+  cwd: string;
+  timeoutMs: number;
+  input?: string;
+}
+
+/** Runs a Windows Source binary through the configured native or compatibility backend. */
+export async function runWindowsProcess(
+  config: Config,
+  binary: string,
+  args: readonly string[],
+  options: BackendRunOptions,
+): Promise<RunResult> {
+  if (config.backend === "native") {
+    return run(binary, [...args], {
+      cwd: options.cwd,
+      timeoutMs: options.timeoutMs,
+      ...(options.input === undefined ? {} : { input: options.input }),
+    });
+  }
+  if (config.backend !== "wine") {
+    throw new ToolchainError(
+      `backend "${config.backend}" is not implemented; use "native" on Windows or "wine" on POSIX`,
+    );
+  }
+  return run("wine", [binary, ...args], {
+    cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
+    ...(options.input === undefined ? {} : { input: options.input }),
+    env: {
+      ...process.env,
+      WINEPREFIX: config.winePrefix,
+      WINEDEBUG: "-all",
+    },
+  });
 }
 
 /**
@@ -98,6 +146,18 @@ export function chooseToolchain(
   stages: readonly CompileStage[],
   game?: ResolvedGame,
 ): ChosenToolchain {
+  // The Hammer++ editor does not imply that its separate compiler chain is installed.
+  // Only GMod has a measured default compiler directory; another game must configure one.
+  if (requested === "plusplus" && game && !game.plusPlusBinDir && game.id !== "gmod") {
+    return {
+      chain: "stock",
+      requested,
+      missing: stages.map((s) => compilerExe(s, "plusplus")),
+      note: `Hammer++ compiler directory is not configured for ${game.id}; using its stock ` +
+        `compilers. An installed hammerplusplus.exe is an editor, not this compiler chain. ` +
+        `Set gameProfiles.${game.id}.plusPlusBinDir only after verifying compatible binaries.`,
+    };
+  }
   const dir = toolchainDir(config, requested, game);
   const missing = stages
     .map((s) => compilerExe(s, requested))
@@ -123,7 +183,7 @@ export function chooseToolchain(
 }
 
 /**
- * Runs one Source compiler under wine.
+ * Runs one Source compiler through the selected backend.
  *
  * Two settings are load-bearing, both measured rather than guessed (README, gate A):
  * the working directory must be the `bin` folder or `tier0.dll` fails to resolve, and
@@ -143,8 +203,8 @@ export async function runCompiler(
   if (!existsSync(binary)) {
     throw new ToolchainError(
       chain === "stock"
-        ? `${binary} not found. These ship with the GMod client, not with srcds; ` +
-          `check gmodBin with the health tool`
+        ? `${binary} not found. Check the selected game's binDir with health; ` +
+          `the compilers must come from its client tools, not srcds.`
         : // Naming the chain matters: without it this reads like a broken GMod install,
           // when in fact the stock compilers are fine and only Hammer++ is absent.
           //
@@ -155,22 +215,8 @@ export async function runCompiler(
           `chain is unaffected, and run_compile falls back to it. See health`,
     );
   }
-  if (config.backend !== "wine") {
-    throw new ToolchainError(
-      `backend "${config.backend}" is not implemented; only wine is proven here`,
-    );
-  }
-
   const started = Date.now();
-  const result = await run("wine", [binary, ...args], {
-    cwd: dir,
-    timeoutMs,
-    env: {
-      ...process.env,
-      WINEPREFIX: config.winePrefix,
-      WINEDEBUG: "-all",
-    },
-  });
+  const result = await runWindowsProcess(config, binary, args, { cwd: dir, timeoutMs });
 
   return {
     ...result,

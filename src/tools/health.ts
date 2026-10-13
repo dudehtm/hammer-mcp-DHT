@@ -46,9 +46,9 @@ const PLUSPLUS = [
 export const health = defineTool({
   name: "health",
   description:
-    "State of the toolchain this server depends on: repo root, the GMod bin directory " +
+    "State of the toolchain this server depends on: repo root, the active game's bin directory " +
     "(which ships with the client, not with srcds), which compilers and .fgd files are " +
-    "present, whether the Wine or Proton backend can be executed, and whether the Python " +
+    "present, whether the native, Wine or Proton backend is configured, and whether the Python " +
     "sidecar (srctools) is installed. Also how many tools this server is serving and " +
     "whether its build is older than the source -- a stale build silently offers fewer " +
     "tools. Start here when a tool reports something missing, or is missing itself.",
@@ -59,7 +59,10 @@ export const health = defineTool({
     const binDir = config.gmodBin;
     const binDirExists = existsSync(binDir);
 
-    const wine = await run("wine", ["--version"], { timeoutMs: 10_000 }).catch(() => null);
+    const wine =
+      config.backend === "wine"
+        ? await run("wine", ["--version"], { timeoutMs: 10_000 }).catch(() => null)
+        : null;
     const sidecar = await probeSidecar(config);
 
     // Never throws: health has to stay callable precisely when the configuration is what
@@ -74,10 +77,12 @@ export const health = defineTool({
     const profiles = gamesError ? {} : allGames(config);
     const fgdList = [...(active?.game.fgd ?? []), ...EXTRA_FGDS];
 
-    const plusDir = toolchainDir(config, "plusplus", active?.game);
-    const plusDirExists = existsSync(plusDir);
+    const plusDir = active?.game.id !== "gmod" && !active?.game.plusPlusBinDir
+      ? null
+      : toolchainDir(config, "plusplus", active?.game);
+    const plusDirExists = plusDir !== null && existsSync(plusDir);
     const plusBinaries = Object.fromEntries(
-      PLUSPLUS.map((b) => [b, plusDirExists && existsSync(join(plusDir, b))]),
+      PLUSPLUS.map((b) => [b, plusDirExists && existsSync(join(plusDir!, b))]),
     );
 
     return {
@@ -107,8 +112,9 @@ export const health = defineTool({
               fgd: active!.game.fgd,
               instancePath: active!.game.instancePath,
               unusableForCompile: active!.game.unusableForCompile,
-              // Which values were read off disk and which are built-in guesses. Only one
-              // game has ever been run here, so this is not decoration.
+              note: active!.game.note ?? null,
+              // Which values were read off disk and which are built-in guesses. The profile
+              // note carries the narrower evidence boundary for branches such as L4D2.
               provenance: active!.game.provenance,
             },
             known: Object.entries(profiles).map(([id, g]) => ({
@@ -116,6 +122,7 @@ export const health = defineTool({
               displayName: g.displayName,
               installed: g.gameDir !== null,
               usableForCompile: g.unusableForCompile === null,
+              note: g.note ?? null,
             })),
           },
       toolchain: {
@@ -130,6 +137,11 @@ export const health = defineTool({
         gameDir: config.gmodGameDir,
         gameDirPresent: existsSync(config.gmodGameDir),
       },
+      editor: {
+        hammer: binDirExists && existsSync(join(binDir, "hammer.exe")),
+        hammerPlusPlus: binDirExists && existsSync(join(binDir, "hammerplusplus.exe")),
+        note: "These are interactive editors. Hammer++ compiler availability is reported separately under plusplus.",
+      },
       plusplus: {
         dir: plusDir,
         present: plusDirExists,
@@ -137,12 +149,9 @@ export const health = defineTool({
         // Reported rather than inferred by the caller: "some of them" is the state that
         // produces a compile which starts and then fails at the second stage.
         usable: Object.values(plusBinaries).every(Boolean),
-        note:
-          "run_compile and run_pack DEFAULT to this chain, and fall back to the stock " +
-          "compilers when it is absent -- saying so in toolchainNote rather than " +
-          "substituting in silence. So absent is workable, not broken: it costs a much " +
-          "slower vvis and the culling flags. From tools_plusplus.zip (ficool2/misc_tools); " +
-          "they require the x86-64 beta branch of GMod.",
+        note: active?.game.id === "l4d2"
+          ? "Hammer++ is usable as an editor when hammerplusplus.exe is present. Its separate compiler chain is not configured for L4D2 here; run_compile falls back to L4D2 stock and reports that choice."
+          : "Hammer++ compilers are separate from the editor. run_compile falls back to stock when this chain is absent and reports the choice.",
       },
       // Standalone tools that belong to no game install, so nothing can discover them.
       // Absent is the normal state and the tools that need them say where to get them;
@@ -161,6 +170,9 @@ export const health = defineTool({
       },
       backend: {
         kind: config.backend,
+        nativeCompiler: config.backend === "native" ? join(binDir, "vbsp.exe") : null,
+        nativeCompilerPresent:
+          config.backend === "native" && existsSync(join(binDir, "vbsp.exe")),
         winePrefix: config.winePrefix,
         wineVersion: wine?.code === 0 ? wine.stdout.trim() : null,
         protonPath: config.protonPath ?? null,
@@ -168,8 +180,9 @@ export const health = defineTool({
       sidecar,
       guardedToolsAllowlisted: config.toolAllowlist,
       note:
-        "This server never talks to a running srcds and never touches " +
-        "srcds/garrysmod/data/gmod_mcp/. Use gmod-mcp for anything live.",
+        "This server works on files and compiler processes. NAV generation, Director behavior, " +
+        "bots and playability require a separate check inside Left 4 Dead 2. It never touches " +
+        "srcds/garrysmod/data/gmod_mcp/.",
     };
   },
 });

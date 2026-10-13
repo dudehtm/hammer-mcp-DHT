@@ -25,7 +25,7 @@ import { portalWidth } from "../space/measure.js";
 import { findRooms } from "../space/rooms.js";
 import type { RoomsResult } from "../space/rooms.js";
 import type { Scene } from "../space/scene.js";
-import { voxelise } from "../space/voxel.js";
+import { DEFAULT_STEP, VoxelBudgetError, voxelise } from "../space/voxel.js";
 import type { VoxelGrid } from "../space/voxel.js";
 import { hullFromPlanes, orderedLoop } from "../vmf/solid.js";
 import type { Plane, Vec3 } from "../vmf/solid.js";
@@ -35,6 +35,7 @@ import { colourFor } from "./raster.js";
 
 /** Height above the lowest standable floor at which the cut is taken. */
 export const DEFAULT_CUT_HEIGHT = 48;
+export const PLAN_ANALYSIS_STEPS = [16, 32, 64] as const;
 
 const INK: Rgb = [24, 28, 36];
 const PAPER: Rgb = [248, 247, 244];
@@ -52,6 +53,8 @@ export interface PlanOptions {
   margin?: number;
   /** Draw room outlines, areas and portal widths. Needs the voxel pass. */
   rooms?: boolean;
+  /** Voxel step for room/leak analysis, separate from the visual grid spacing. */
+  analysisStep?: number;
   grid?: number;
 }
 
@@ -62,6 +65,8 @@ export interface PlanResult {
   /** Sum of the section areas, in square world units: the invariant the tests use. */
   sectionArea: number;
   rooms: RoomsResult | null;
+  /** Actual voxel resolution used, or null when room analysis was not requested. */
+  analysisStep: number | null;
   notes: string[];
 }
 
@@ -115,6 +120,49 @@ function cutHeightFor(grid: VoxelGrid | null, scene: Scene): number {
   return scene.mins[2] + DEFAULT_CUT_HEIGHT;
 }
 
+function analysisGrid(
+  scene: Scene,
+  seeds: readonly Vec3[],
+  requested: number | undefined,
+  notes: string[],
+): VoxelGrid {
+  const allowed = PLAN_ANALYSIS_STEPS as readonly number[];
+  if (requested !== undefined && !allowed.includes(requested)) {
+    throw new VoxelBudgetError(
+      `analysisStep ${requested} is not supported for render_vmf_plan; choose one of ` +
+        `${PLAN_ANALYSIS_STEPS.join(", ")} units`,
+    );
+  }
+
+  const steps = requested === undefined ? PLAN_ANALYSIS_STEPS : ([requested] as const);
+  let lastError: VoxelBudgetError | undefined;
+  for (const step of steps) {
+    try {
+      const grid = voxelise(scene, seeds, { step });
+      if (requested === undefined && step !== DEFAULT_STEP) {
+        notes.push(
+          `Room analysis adapted from ${DEFAULT_STEP} to ${step}-unit cells because the ` +
+            `finer grid exceeded its cell budget. Widths and leak paths are therefore ` +
+            `resolved at ${step} units; features narrower than that may not be resolved.`,
+        );
+      }
+      return grid;
+    } catch (error) {
+      if (!(error instanceof VoxelBudgetError)) throw error;
+      lastError = error;
+      if (requested !== undefined) {
+        throw new VoxelBudgetError(
+          `analysisStep ${requested} cannot fit this map: ${error.message}. ` +
+            `Choose a coarser supported step (${PLAN_ANALYSIS_STEPS.filter((s) => s > requested).join(", ") || "none"}) ` +
+            `or omit analysisStep to allow automatic adaptation`,
+        );
+      }
+    }
+  }
+
+  throw lastError ?? new VoxelBudgetError("room analysis could not choose a voxel resolution");
+}
+
 export function buildPlan(scene: Scene, seeds: readonly Vec3[], options: PlanOptions = {}): PlanResult {
   const notes: string[] = [];
   const maxWidth = options.maxWidth ?? 1000;
@@ -124,7 +172,7 @@ export function buildPlan(scene: Scene, seeds: readonly Vec3[], options: PlanOpt
   let grid: VoxelGrid | null = null;
   let rooms: RoomsResult | null = null;
   if (options.rooms !== false && seeds.length > 0) {
-    grid = voxelise(scene, seeds);
+    grid = analysisGrid(scene, seeds, options.analysisStep, notes);
     rooms = findRooms(grid);
   }
 
@@ -349,6 +397,7 @@ export function buildPlan(scene: Scene, seeds: readonly Vec3[], options: PlanOpt
     brushesCut,
     sectionArea,
     rooms,
+    analysisStep: grid?.step ?? null,
     notes,
   };
 }

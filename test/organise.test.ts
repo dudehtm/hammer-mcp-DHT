@@ -68,7 +68,7 @@ describe("readOrganisation", () => {
     // Built by putting a brush in a visgroup and then deleting the declaration, which is
     // exactly the state a hand-edited file or a bad merge leaves behind.
     const added = setVisgroup(probe(), { ids: [FLOOR] }, { name: "Ghost" });
-    const orphaned = added.text.replace(/visgroups\n\{[\s\S]*?\n\}\n/, "");
+    const orphaned = added.text.replace(/visgroups\r?\n\{[\s\S]*?\r?\n\}\r?\n/, "");
     expect(orphaned).not.toBe(added.text);
     expect(orphaned).toContain(`"visgroupid" "${added.visgroupId}"`);
     const r = readOrganisation(orphaned);
@@ -149,7 +149,7 @@ describe("setVisgroup", () => {
     // to the next new visgroup, adopting every unselected brush wearing it. The handler's
     // orphan check then sees nothing wrong, because nothing is orphaned any more.
     const added = setVisgroup(probe(), { ids: [WALL] }, { name: "Ghost" });
-    const orphaned = added.text.replace(/visgroups\n\{[\s\S]*?\n\}\n/, "");
+    const orphaned = added.text.replace(/visgroups\r?\n\{[\s\S]*?\r?\n\}\r?\n/, "");
     expect(readOrganisation(orphaned).warnings.join(" ")).toMatch(/declared nowhere/);
 
     const fresh = setVisgroup(orphaned, { ids: [FLOOR] }, { name: "North" });
@@ -250,7 +250,7 @@ describe("groupSolids", () => {
         set: { probe_marker: "1" },
       },
     ]).text.replace(
-      /(entity\n\{\n\t"id" "\d+"\n\t"classname" "info_target")/,
+      /(entity\r?\n\{\r?\n\t"id" "\d+"\r?\n\t"classname" "info_target")/,
       `$1\n\teditor\n\t{\n\t\t"color" "220 30 220"\n\t\t"groupid" "${id}"\n\t}`,
     );
     expect(withEntity).toContain(`"groupid" "${id}"`);
@@ -267,7 +267,7 @@ describe("groupSolids", () => {
     const grouped = groupSolids(probe(), { ids: [FLOOR, WALL] });
     const id = readOrganisation(grouped.text).groups[0]!.id;
     const squashed = grouped.text.replace(
-      new RegExp(`"color" "0 180 220"\\n\\t+"groupid" "${id}"`),
+      new RegExp(`"color" "0 180 220"\\r?\\n\\t+"groupid" "${id}"`),
       `"color" "9 8 7" "groupid" "${id}"`,
     );
     const oneLine = squashed !== grouped.text;

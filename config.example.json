@@ -1,15 +1,17 @@
 {
-  "_comment": "Copy to <repoRoot>/.hammer-mcp/config.json, then delete every field you do not need -- all of them are optional, and the server fills in defaults documented in the README. Paths must be ABSOLUTE: nothing here expands ~ or $HOME. Replace /home/you with your own home directory.",
-
-  "gmodBin": "/home/you/.steam/steam/steamapps/common/GarrysMod/bin",
-  "gmodGameDir": "/home/you/.steam/steam/steamapps/common/GarrysMod/garrysmod",
-  "gmodBinPlusPlus": "/home/you/.steam/steam/steamapps/common/GarrysMod/bin/win64",
-
-  "externalToolsDir": "/home/you/tools/source",
-
-  "backend": "wine",
-  "winePrefix": "/home/you/.wine",
-
+  "_comment": "Copy to <repoRoot>/.hammer-mcp/config.json. Replace the example absolute paths with your local L4D2 installation; keep machine paths out of git.",
+  "game": "l4d2",
+  "backend": "native",
+  "gameProfiles": {
+    "l4d2": {
+      "gameRoot": "C:\\path\\to\\Steam\\steamapps\\common\\Left 4 Dead 2",
+      "gameDir": "C:\\path\\to\\Steam\\steamapps\\common\\Left 4 Dead 2\\left4dead2",
+      "binDir": "C:\\path\\to\\Steam\\steamapps\\common\\Left 4 Dead 2\\bin",
+      "fgd": ["left4dead2.fgd"],
+      "branch": "l4d2"
+    }
+  },
+  "writeRoots": [],
   "toolAllowlist": [],
   "plugins": []
 }

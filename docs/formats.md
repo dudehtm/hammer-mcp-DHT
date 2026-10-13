@@ -1,5 +1,23 @@
 # Formats, schemas and game profiles
 
+## BSP lump directories
+
+The normal Source `lump_t` descriptor stores fields as `offset, length, version, fourCC`.
+The L4D2 BSPs observed here (version 21) store the same four integers as
+`version, offset, length, fourCC`. `read_bsp_info` and every offset reader choose between those
+layouts by validating the complete directory: ranges must stay inside the file, non-empty lumps
+must not overlap or enter the header, and the entity lump must exist. Version 21 alone is not the
+selector, and an ambiguous directory is refused.
+
+The reader touches the 1036-byte header plus four bytes at the start of each non-empty lump. It
+never loads a production BSP wholesale. Individual LZMA bodies are reported as compressed and
+readers that need records refuse them rather than dividing compressed bytes into invented counts.
+
+On 2026-10-03 the external L4D2 `bol_test_box` BSP was read successfully: version 21, L4D2 layout,
+entities at offset 18000 with length 789, and one model at offset 10752 with length 48. Its entity
+lump was NUL-terminated. The descriptor result is verified for that BSP; branch-specific compile
+ceilings remain unverified and are not borrowed from the SDK 2013 table.
+
 ## The `.lmp` format, as measured
 
 A 20-byte header, five little-endian `int32`, then the payload:
@@ -135,9 +153,10 @@ discovered twice.
 
 ### A profile records where each of its values came from
 
-Only one game has ever been run on this machine. "Read from `gameinfo.txt`" and "written in the
-built-in table" must therefore not look alike, so every resolved field carries its `provenance`
-(`source` plus `verified`), which `health` returns.
+Garry's Mod has the full local gate evidence, while L4D2 has a narrower compile/BSP observation.
+"Read from `gameinfo.txt`" and "written in the built-in table" must not look alike, so every
+resolved field carries its `provenance` (`source` plus `verified`), which `health` returns; the
+profile note states the boundary of the branch evidence.
 
 The built-in table is deliberately thin: appid, install directory, mod directory, branch. **No FGD
 name, no lump ceiling.** A `-game` pointed at a directory that does not exist shows up in one line;

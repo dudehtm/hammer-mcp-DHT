@@ -1,18 +1,18 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { loadConfig as coreLoadConfig } from "@projectsociety/mcp-core";
 import { z } from "zod";
 import { GameProfileOverride } from "./games/profile.js";
 import type { ResolvedGame } from "./games/profile.js";
 import { gameFor } from "./games/resolve.js";
 
-const STEAM_GMOD = join(
+const STEAM_FALLBACK = join(
   homedir(),
   ".steam",
   "steam",
   "steamapps",
   "common",
-  "GarrysMod",
+  "Left 4 Dead 2",
 );
 
 /**
@@ -21,10 +21,10 @@ const STEAM_GMOD = join(
  *
  * The Source toolchain lives OUTSIDE the repo, in the Steam library, so its paths are
  * machine-specific by nature. Nothing here may be assumed to exist: every tool that
- * depends on `gmodBin` degrades to a reported reason rather than throwing.
+ * depends on a Source toolchain degrades to a reported reason rather than throwing.
  */
 export const ConfigFile = z.object({
-  /** Root of the GMod repo (contains tools/, addons/, srcds/). */
+  /** Root containing this server's runtime state and relative map paths. */
   repoRoot: z.string().optional(),
   /**
    * Directory holding hammer.exe, vbsp/vvis/vrad.exe and the .fgd files. These ship
@@ -53,10 +53,10 @@ export const ConfigFile = z.object({
    */
   externalToolsDir: z.string().optional(),
   /**
-   * Which game profile tools work against when a call does not name one. `gmod` unless
+   * Which game profile tools work against when a call does not name one. `l4d2` unless
    * set; `read_source_games` lists what this machine actually has.
    */
-  game: z.string().default("gmod"),
+  game: z.string().default("l4d2"),
   /**
    * Per-profile overrides, keyed by profile id. Anything discovery gets wrong or cannot
    * see goes here -- a game installed outside Steam, compilers in a separate app, an
@@ -70,10 +70,12 @@ export const ConfigFile = z.object({
   /** The `-game` directory the compilers resolve content against. */
   gmodGameDir: z.string().optional(),
   /**
-   * How the Windows compilers are executed. Decided by measurement, not preference:
-   * plain wine was verified to run vbsp/vvis/vrad here on 02/08/2026 (see README).
+   * How the Windows compilers are executed. Native Windows is the default on Windows;
+   * Wine remains the default on POSIX hosts and is kept for the Linux workflow.
    */
-  backend: z.enum(["wine", "proton"]).default("wine"),
+  backend: z
+    .enum(["native", "wine", "proton"])
+    .default(process.platform === "win32" ? "native" : "wine"),
   /** WINEPREFIX for the `wine` backend. */
   winePrefix: z.string().default(join(homedir(), ".wine")),
   /** Proton entry script, for the `proton` backend. */
@@ -83,6 +85,8 @@ export const ConfigFile = z.object({
    * under the state directory. Set it only to point at an interpreter you manage.
    */
   sidecarPython: z.string().optional(),
+  /** Relative or absolute roots where guarded tools may write when non-empty. */
+  writeRoots: z.array(z.string()).default([]),
   /** Tools allowed without confirmation. Empty means the default policy. */
   toolAllowlist: z.array(z.string()).default([]),
   /** Plugin ESM modules to load, relative to the repo root. Each exports `tools`. */
@@ -133,16 +137,17 @@ function lazy<T>(target: object, key: string, compute: () => T): void {
  * Loads the effective configuration. The root is resolved in this order:
  * 1. `HAMMER_MCP_REPO` (env)  2. the file's `repoRoot` field  3. walking up from cwd.
  *
- * `gmodBin` and `gmodGameDir` are resolved **lazily**: reading them scans the Steam
- * libraries, and loading a configuration must stay a file read. The last fallback is the
- * historical hard-coded Steam path, so a machine where discovery finds nothing behaves
- * exactly as it did before profiles existed.
+ * `gmodBin` and `gmodGameDir` are legacy property names resolved lazily for the active
+ * profile. A missing install produces an absent L4D2 fallback path for health to report.
  */
 export function loadConfig(cwd: string = process.cwd()): Config {
-  const config = coreLoadConfig(
-    { envVar: "HAMMER_MCP_REPO", stateDirName: ".hammer-mcp", schema: ConfigFile },
-    cwd,
-  ) as Config;
+  const config = {
+    ...coreLoadConfig(
+      { envVar: "HAMMER_MCP_REPO", stateDirName: ".hammer-mcp", schema: ConfigFile },
+      cwd,
+    ),
+    ...environmentOverrides(),
+  } as Config;
 
   config.explicit = {
     ...(config.gmodBin !== undefined ? { gmodBin: config.gmodBin } : {}),
@@ -164,11 +169,11 @@ export function loadConfig(cwd: string = process.cwd()): Config {
     config.externalToolsDir = join(config.stateDir, "tools");
   }
 
-  lazy(config, "gmodBin", () => config.explicit.gmodBin ?? active()?.binDir ?? join(STEAM_GMOD, "bin"));
+  lazy(config, "gmodBin", () => config.explicit.gmodBin ?? active()?.binDir ?? join(STEAM_FALLBACK, "bin"));
   lazy(
     config,
     "gmodGameDir",
-    () => config.explicit.gmodGameDir ?? active()?.gameDir ?? join(STEAM_GMOD, "garrysmod"),
+    () => config.explicit.gmodGameDir ?? active()?.gameDir ?? join(STEAM_FALLBACK, "left4dead2"),
   );
   // The profile already derives this from an explicitly configured gmodBin -- see
   // applyOverride in games/resolve.ts. Deliberately not duplicated here: two paths to the
@@ -180,6 +185,20 @@ export function loadConfig(cwd: string = process.cwd()): Config {
   );
 
   return config;
+}
+
+/** Small deployment overrides for clients such as OpenCode, without a machine-local file. */
+function environmentOverrides(): Partial<ConfigFile> {
+  const raw: Record<string, unknown> = {};
+  const writeRoots = process.env["HAMMER_MCP_WRITE_ROOTS"];
+  if (process.env["HAMMER_MCP_GAME"]) raw.game = process.env["HAMMER_MCP_GAME"];
+  if (process.env["HAMMER_MCP_BACKEND"]) raw.backend = process.env["HAMMER_MCP_BACKEND"];
+  if (process.env["HAMMER_MCP_SIDECAR_PYTHON"])
+    raw.sidecarPython = process.env["HAMMER_MCP_SIDECAR_PYTHON"];
+  if (writeRoots !== undefined) {
+    raw.writeRoots = writeRoots.split(delimiter).filter((root) => root.length > 0);
+  }
+  return ConfigFile.partial().parse(raw);
 }
 
 export { findRepoRoot } from "@projectsociety/mcp-core";

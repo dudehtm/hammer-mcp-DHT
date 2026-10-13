@@ -1,4 +1,4 @@
-import { BspFormatError, readAt, readHeader, requireLump } from "./header.js";
+import { BspFormatError, readAt, readHeader, requireUncompressedLump } from "./header.js";
 import type { BspHeader, BspLump } from "./header.js";
 
 const LUMP_LEAFS = 10;
@@ -43,22 +43,15 @@ export interface VisleafReport {
 }
 
 function guardLump(header: BspHeader, index: number, structBytes: number): BspLump {
-  const lump = requireLump(header, index);
-  if (lump.compressed) {
+  const uncompressed = requireUncompressedLump(header, index);
+  if (uncompressed.length % structBytes !== 0) {
     throw new BspFormatError(
-      `${header.path}: lump ${index} (${lump.name ?? index}) is individually LZMA-compressed; ` +
-        `refusing rather than decoding compressed bytes as records. It declares ` +
-        `${lump.declaredUncompressedBytes} uncompressed bytes, not verified here.`,
-    );
-  }
-  if (lump.length % structBytes !== 0) {
-    throw new BspFormatError(
-      `${header.path}: lump ${index} (${lump.name ?? index}) is ${lump.length} bytes, not a ` +
+      `${header.path}: lump ${index} (${uncompressed.name ?? index}) is ${uncompressed.length} bytes, not a ` +
         `multiple of the expected ${structBytes}-byte record; the layout differs in this ` +
         `BSP version`,
     );
   }
-  return lump;
+  return uncompressed;
 }
 
 /**
@@ -127,13 +120,7 @@ export function readVisleafStats(path: string): VisleafReport {
   let clusterCount: number | null = null;
   let visibilityBytes = 0;
   if (visLump && visLump.length > 0) {
-    if (visLump.compressed) {
-      throw new BspFormatError(
-        `${header.path}: lump ${LUMP_VISIBILITY} (${visLump.name ?? LUMP_VISIBILITY}) is ` +
-          `individually LZMA-compressed; refusing to read its cluster count. It declares ` +
-          `${visLump.declaredUncompressedBytes} uncompressed bytes, not verified here.`,
-      );
-    }
+    requireUncompressedLump(header, LUMP_VISIBILITY);
     if (visLump.length >= VISIBILITY_HEADER_BYTES) {
       const visHeader = readAt(path, visLump.offset, VISIBILITY_HEADER_BYTES);
       clusterCount = visHeader.readInt32LE(0);

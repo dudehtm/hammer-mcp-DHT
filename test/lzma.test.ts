@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readGeometry } from "../src/bsp/geometry.js";
+import { readEntityLump } from "../src/bsp/entities.js";
 import { LZMA_MAGIC, readHeader } from "../src/bsp/header.js";
+import { readModels } from "../src/bsp/models.js";
+import { readTree } from "../src/bsp/trace.js";
 import { FIXTURES } from "./support/env.js";
 
 const PROBE = join(FIXTURES, "hmcp_probe.bsp");
@@ -87,5 +90,15 @@ describe("a lump compressed on its own", () => {
     // "cannot grow" list for a lump nobody measured.
     const path = withCompressedLump(PLANES, 16_000);
     expect(readGeometry(path).nearLimit.some((l) => l.index === PLANES)).toBe(false);
+  });
+
+  it("refuses compressed entity, model and tree bodies instead of decoding them", () => {
+    const entityPath = withCompressedLump(0, 16_000);
+    const modelPath = withCompressedLump(14, 16_000);
+    const treePath = withCompressedLump(PLANES, 16_000);
+
+    expect(() => readEntityLump(entityPath)).toThrow(/LZMA/i);
+    expect(() => readModels(modelPath)).toThrow(/LZMA/i);
+    expect(() => readTree(treePath)).toThrow(/LZMA/i);
   });
 });

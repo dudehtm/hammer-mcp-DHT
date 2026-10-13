@@ -57,6 +57,21 @@ describe("nav mesh header", () => {
     expect(() => readNavHeader(bogus)).toThrow(NavFormatError);
     expect(() => readNavHeader(bogus)).toThrow(/0xFEEDFACE/);
   });
+
+  it("does not invent an area count from an unrecognised branch layout", () => {
+    const nav = join(scratch, "other-layout.nav");
+    const bytes = Buffer.alloc(24);
+    bytes.writeUInt32LE(0xfeedface, 0);
+    bytes.writeUInt32LE(16, 4);
+    bytes.writeUInt32LE(14, 8);
+    bytes.writeUInt32LE(100, 12);
+    bytes[16] = 1;
+    bytes.writeUInt16LE(0, 17);
+    bytes[19] = 0;
+    bytes.writeUInt32LE(1_000_000, 20);
+    writeFileSync(nav, bytes);
+    expect(readNavHeader(nav).areaCount).toBeNull();
+  });
 });
 
 describe("read_nav", () => {

@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { gameBlock, gameFor } from "../games/resolve.js";
 import { BUILTIN_PROFILES, findProfile, reportMap } from "../report/budget.js";
 import { defineTool } from "../mcp/registry.js";
-import { resolveInput } from "./paths.js";
+import { GAME, GAME_BLOCK, resolveInput } from "./paths.js";
 
 const Criterion = z.object({
   id: z.string(),
@@ -25,6 +26,8 @@ export const readMapReportTool = defineTool({
     "MAX_MAP_LIGHTING, whether vvis ran at all, how finely the world is split, and whether " +
     "cubemaps and HDR exist. Limits come from Valve's headers; thresholds come from the " +
     "profile and each one states its own provenance, including when it was simply chosen. " +
+    "The selected engine branch is returned separately; L4D2 never inherits SDK 2013 lump or " +
+    "edict ceilings without verified data. " +
     "A criterion nothing calibrates reports 'skipped' with the reason rather than a " +
     "confident verdict about nothing.",
   realm: "map",
@@ -41,10 +44,17 @@ export const readMapReportTool = defineTool({
       .array(z.enum(["pass", "warn", "fail", "skipped"]))
       .optional()
       .describe("Return only these verdicts. Omit for all of them."),
+    game: GAME,
   },
   outputSchema: {
+    game: GAME_BLOCK,
     path: z.string(),
     profile: z.object({ id: z.string(), description: z.string() }),
+    engine: z.object({
+      branch: z.string(),
+      limitsVerified: z.boolean(),
+      limitSource: z.string().nullable(),
+    }),
     overall: z.enum(["pass", "warn", "fail", "skipped"]),
     summary: z.object({
       pass: z.number(),
@@ -68,13 +78,16 @@ export const readMapReportTool = defineTool({
       );
     }
 
-    const report = reportMap(resolveInput(args.path, ctx.config), profile);
+    const { game, from } = gameFor(ctx.config, args.game);
+    const report = reportMap(resolveInput(args.path, ctx.config), profile, { branch: game.branch });
     const wanted = args.verdicts;
     const criteria = wanted ? report.criteria.filter((c) => wanted.includes(c.verdict)) : report.criteria;
 
     return {
+      game: gameBlock(game, from),
       path: report.path,
       profile: report.profile,
+      engine: report.engine,
       overall: report.overall,
       summary: report.summary,
       criteria,

@@ -1,4 +1,10 @@
-import { LUMP_MODELS, readAt, readHeader, requireLump } from "./header.js";
+import {
+  BspFormatError,
+  LUMP_MODELS,
+  readAt,
+  readHeader,
+  requireUncompressedLump,
+} from "./header.js";
 import type { BspHeader } from "./header.js";
 
 /**
@@ -42,7 +48,12 @@ export interface ModelLump {
  */
 export function readModels(path: string): ModelLump {
   const header = readHeader(path);
-  const lump = requireLump(header, LUMP_MODELS);
+  const lump = requireUncompressedLump(header, LUMP_MODELS);
+  if (lump.length % MODEL_BYTES !== 0) {
+    throw new BspFormatError(
+      `${path}: MODELS lump is ${lump.length} bytes, not a multiple of ${MODEL_BYTES}`,
+    );
+  }
   const raw = readAt(path, lump.offset, lump.length);
 
   const count = Math.floor(raw.length / MODEL_BYTES);

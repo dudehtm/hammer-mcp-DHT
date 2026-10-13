@@ -88,6 +88,9 @@ export const has = {
    * and the tests would report the content missing rather than the mount failing.
    */
   gameContent: existsSync(join(config.gmodGameDir, "gameinfo.txt")),
+  /** Historical content fixtures assert exact GMod assets and dimensions. */
+  gmodContent:
+    config.game === "gmod" && existsSync(join(config.gmodGameDir, "gameinfo.txt")),
   /**
    * ficool2's bsp_rename, a standalone download that belongs to no game install.
    *
@@ -121,6 +124,7 @@ const LABELS: Record<keyof typeof has, string> = {
   navPair: "a .nav / .bsp pair",
   luaEntities: "a GMod Lua entity tree",
   gameContent: `the game's own content (${config.gmodGameDir})`,
+  gmodContent: "GMod content needed by legacy asset fixtures (optional for L4D2)",
   bspRename: `ficool2's bsp_rename.exe in ${config.externalToolsDir} (optional)`,
   tga2skybox: `ficool2's tga2skybox.exe in ${config.externalToolsDir} (optional)`,
   cubemap2hdr: `ficool2's cubemap2hdr.exe in ${config.externalToolsDir} (optional)`,

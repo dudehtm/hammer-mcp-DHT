@@ -70,7 +70,10 @@ export function fgdContext(
   id?: string,
 ): { game: ResolvedGame; from: "argument" | "config"; binDir: string; fgd: string[] } {
   const { game, from } = gameFor(config, id);
-  const withOptional: ResolvedGame = { ...game, optionalFgd: OPTIONAL_FGDS };
+  const withOptional: ResolvedGame = {
+    ...game,
+    optionalFgd: game.id === "gmod" ? OPTIONAL_FGDS : game.optionalFgd,
+  };
   return {
     game,
     from,
@@ -94,9 +97,8 @@ export const readFgdClass = defineTool({
     "What the game's own FGD declares for an entity class: every keyvalue with its type " +
     "and default, every input, every output. This is the schema Hammer enforces, so it " +
     "answers 'does this class accept that key' without guessing from the wiki. Called " +
-    "with no classname it lists the classes, optionally filtered by prefix. Reads " +
-    "garrysmod.fgd from the GMod install, not a generic multi-game database. Needs the " +
-    "Python sidecar and the GMod bin directory; see health.",
+    "with no classname it lists the classes, optionally filtered by prefix. Reads the " +
+    "selected game's FGD from its bin directory. Needs the Python sidecar; see health.",
   realm: "map",
   inputSchema: {
     classname: z.string().optional().describe("Exact class, e.g. logic_relay."),
@@ -306,7 +308,7 @@ export const readVmfLint = defineTool({
     "on because their model's origin is at its centre, and counts that approach the " +
     "compiler limits. " +
     "Knows the repo's Lua-defined entities, so a scripted class is not reported as " +
-    "unknown. Needs the Python sidecar and the GMod bin directory; see health.",
+    "unknown. Needs the Python sidecar and the selected game's bin directory; see health.",
   realm: "map",
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
@@ -392,7 +394,9 @@ export const readVmfLint = defineTool({
     ] as const) {
       const spec = LIMIT_FOR.get(lumpName);
       const count = reply.counts[what] ?? 0;
-      if (!spec?.limit) continue;
+      // These ceilings come from SDK 2013. L4D2 counts are useful, but its capacity
+      // remains unverified and must not inherit SDK 2013 percentages.
+      if (game.branch !== "sdk2013" || !spec?.limit) continue;
       const usedFraction = Math.round((count / spec.limit) * 1000) / 1000;
       if (usedFraction >= 0.5) {
         nearLimit.push({

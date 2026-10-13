@@ -167,7 +167,8 @@ export function lineRange(text: string, block: KvBlock): { start: number; end: n
   let end = block.end;
   let i = block.end;
   while (i < text.length && (text[i] === "\t" || text[i] === " ")) i += 1;
-  if (i < text.length && text[i] === "\n") end = i + 1;
+  if (i < text.length && text[i] === "\r" && text[i + 1] === "\n") end = i + 2;
+  else if (i < text.length && text[i] === "\n") end = i + 1;
   else if (i >= text.length) end = i;
   // Anything else after the block on its line stays where it is.
   if (end !== block.end && !alone) end = block.end;
@@ -189,8 +190,12 @@ export function pairRange(text: string, pair: KvPair): { start: number; end: num
   const alone = /^[\t ]*$/.test(text.slice(lineStart, pair.start));
   let i = pair.end;
   while (i < text.length && (text[i] === "\t" || text[i] === " ")) i += 1;
-  const endsLine = i >= text.length || text[i] === "\n";
-  if (alone && endsLine) return { start: lineStart, end: i < text.length ? i + 1 : i };
+  const endsLine =
+    i >= text.length || text[i] === "\n" || (text[i] === "\r" && text[i + 1] === "\n");
+  if (alone && endsLine) {
+    const newlineEnd = text[i] === "\r" ? i + 2 : i + 1;
+    return { start: lineStart, end: i < text.length ? newlineEnd : i };
+  }
   // Otherwise take the pair and the space that separated it from what follows, so the
   // remaining keys do not run together.
   return { start: pair.start, end: i };

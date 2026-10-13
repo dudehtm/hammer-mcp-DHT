@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -12,9 +12,11 @@ import {
   runCompiler,
   ToolchainError,
   toolchainDir,
+  toCompilerPath,
   toWindowsPath,
 } from "../src/compile/wine.js";
 import type { MapEntity } from "../src/entity/model.js";
+import { resolveProfiles } from "../src/games/profile.js";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readLeak, runCompile } from "../src/tools/compile.js";
 import { FIXTURES, config, ctx as sharedCtx, has, paths } from "./support/env.js";
@@ -33,6 +35,11 @@ describe("Windows path conversion", () => {
     // The failure this prevents is silent: wine resolves a relative path against its
     // own working directory, and vbsp then compiles a different file successfully.
     expect(() => toWindowsPath("maps/foo.vmf")).toThrow(ToolchainError);
+  });
+
+  it("leaves an absolute path unchanged for the native backend", () => {
+    const path = "C:\\maps\\bol_test_base.vmf";
+    expect(toCompilerPath(path, "native")).toBe(path);
   });
 });
 
@@ -278,6 +285,17 @@ describe("compiling for real, under wine", () => {
 describe("choosing the Hammer++ toolchain", () => {
   const plusDir = toolchainDir(config, "plusplus");
   const hasPlus = has.plusplus;
+
+  it("does not infer L4D2 compiler support from an unconfigured win64 directory", () => {
+    const binDir = join(scratch, "l4d2-bin");
+    const plusDir = join(binDir, "win64");
+    mkdirSync(plusDir, { recursive: true });
+    writeFileSync(join(plusDir, "vbspplusplus.exe"), "stub");
+    const game = { ...resolveProfiles({}, [])["l4d2"]!, binDir };
+    const choice = chooseToolchain(config, "plusplus", ["vbsp"], game);
+    expect(choice.chain).toBe("stock");
+    expect(choice.note).toMatch(/not configured/);
+  });
 
   it("resolves the binaries of each chain to its own directory", () => {
     // The correction gate C forced: the ++ compilers are not siblings of the stock ones.

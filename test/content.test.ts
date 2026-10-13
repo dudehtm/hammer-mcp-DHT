@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { ToolContext } from "../src/mcp/registry.js";
 import { readGameContentTool, readModelInfoTool } from "../src/tools/content.js";
 import { readSourceGames as readSourceGamesTool } from "../src/tools/games.js";
 import { ctx as sharedCtx, has } from "./support/env.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
-const ready = has.sidecar && has.gameContent;
+const ready = has.sidecar && has.gmodContent;
 
 /**
  * These search the game's own VPKs through the Python sidecar, and one of them does it
@@ -22,6 +23,8 @@ const VPK_SEARCH_TIMEOUT = 30_000;
 
 interface SearchReply {
   mounted: boolean;
+  offset?: number;
+  limit?: number;
   total: number;
   shown?: number;
   truncated?: boolean;
@@ -54,6 +57,16 @@ const search = (args: Record<string, unknown>): Promise<SearchReply> =>
   ) as unknown as Promise<SearchReply>;
 
 describe("read_game_content", () => {
+  it("declares an offset separate from the visual result limit", () => {
+    const parsed = z.object(readGameContentTool.inputSchema!).parse({
+      pattern: "brick",
+      offset: 4,
+      limit: 2,
+    });
+    expect(parsed.offset).toBe(4);
+    expect(parsed.limit).toBe(2);
+  });
+
   it("refuses an empty pattern rather than returning the whole game", async () => {
     // Refused in TypeScript, before the sidecar is reached, so this holds on a bare
     // machine -- which is the machine CI runs on and where every other test here skips.
@@ -99,6 +112,19 @@ describe("read_game_content", () => {
     expect(r.shown).toBe(2);
     expect(r.total).toBeGreaterThan(2);
     expect(r.truncated).toBe(true);
+  }, VPK_SEARCH_TIMEOUT);
+
+  it.skipIf(!ready)("pages stable results without changing the total", async () => {
+    const first = await search({ pattern: "brick", offset: 0, limit: 2 });
+    const second = await search({ pattern: "brick", offset: 2, limit: 2 });
+    expect(first.total).toBe(second.total);
+    expect(first.offset).toBe(0);
+    expect(second.offset).toBe(2);
+    expect(first.limit).toBe(2);
+    expect(second.limit).toBe(2);
+    expect(first.results).toHaveLength(2);
+    expect(second.results).toHaveLength(2);
+    expect(second.results.map((x) => x.path)).not.toEqual(first.results.map((x) => x.path));
   }, VPK_SEARCH_TIMEOUT);
 
   it.skipIf(!ready)("reads the shader only when asked, and marks tool textures", async () => {

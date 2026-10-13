@@ -1,5 +1,8 @@
 import { LUMP_NAMES, readHeader } from "./header.js";
 import type { BspHeader } from "./header.js";
+import type { EngineBranch } from "../games/profile.js";
+
+const SOURCE_LIMIT_SOURCE = "source-sdk-2013 src/public/bspfile.h, read 11/08/2026";
 
 /**
  * Per-lump struct size and compile-time ceiling.
@@ -108,9 +111,19 @@ export interface LumpReport {
 
 export interface GeometryReport {
   header: BspHeader;
+  /** Branch selected by the caller, or inferred from the BSP descriptor layout. */
+  branch: EngineBranch;
+  /** False when this branch has no verified lump ceilings in this reader. */
+  limitsVerified: boolean;
+  limitSource: string | null;
   lumps: LumpReport[];
   /** Lumps at or above 80% of their ceiling: what stops this map from growing. */
   nearLimit: LumpReport[];
+}
+
+export interface GeometryOptions {
+  /** Engine branch whose limits and record sizes may be applied. */
+  branch?: EngineBranch;
 }
 
 /**
@@ -119,17 +132,30 @@ export interface GeometryReport {
  * Reads no lump body: the directory in the first 1036 bytes carries every length, so
  * this is instant on a 1 GB map.
  */
-export function readGeometry(path: string): GeometryReport {
+export function readGeometry(path: string, options: GeometryOptions = {}): GeometryReport {
   const header = readHeader(path);
+  // The directory layout is direct evidence. It takes precedence over a configured default
+  // such as GMod when a caller points the tool at an L4D2 BSP without passing `game`.
+  const branch: EngineBranch = header.layout === "l4d2" ? "l4d2" : options.branch ?? "sdk2013";
+  const limitsVerified = branch === "sdk2013";
+  const specs: readonly LumpSpec[] = limitsVerified
+    ? LUMP_SPECS
+    : header.lumps
+        .filter((lump) => lump.length > 0)
+        .map((lump) => ({ index: lump.index }));
   const lumps: LumpReport[] = [];
 
-  for (const spec of LUMP_SPECS) {
+  for (const spec of specs) {
     const lump = header.lumps[spec.index];
     if (!lump || lump.length === 0) continue;
 
     let count: number | null = null;
     let note: string | undefined;
-    if (lump.compressed) {
+    if (!limitsVerified) {
+      note =
+        `no verified record sizes or compile ceilings for engine branch ${branch}; ` +
+        `counts and limit percentages are omitted rather than borrowed from SDK 2013`;
+    } else if (lump.compressed) {
       // Checked BEFORE divisibility, and it is not the same guard. `length` here counts
       // COMPRESSED bytes, so dividing it by a record size is meaningless -- and only
       // sometimes obviously so, since a compressed length lands on a multiple of the
@@ -202,6 +228,9 @@ export function readGeometry(path: string): GeometryReport {
 
   return {
     header,
+    branch,
+    limitsVerified,
+    limitSource: limitsVerified ? SOURCE_LIMIT_SOURCE : null,
     lumps,
     nearLimit: lumps.filter((l) => (l.usedFraction ?? 0) >= 0.8),
   };

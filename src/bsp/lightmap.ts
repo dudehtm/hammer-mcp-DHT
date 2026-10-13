@@ -1,4 +1,4 @@
-import { BspFormatError, readAt, readHeader, requireLump } from "./header.js";
+import { BspFormatError, readAt, readHeader, requireUncompressedLump } from "./header.js";
 import type { BspHeader, BspLump } from "./header.js";
 
 const LUMP_FACES = 7;
@@ -41,14 +41,7 @@ export interface LightmapBudgetReport {
 }
 
 function guardLump(header: BspHeader, index: number, structBytes: number): BspLump {
-  const lump = requireLump(header, index);
-  if (lump.compressed) {
-    throw new BspFormatError(
-      `${header.path}: lump ${index} (${lump.name ?? index}) is individually LZMA-compressed; ` +
-        `refusing rather than decoding compressed bytes as records. It declares ` +
-        `${lump.declaredUncompressedBytes} uncompressed bytes, not verified here.`,
-    );
-  }
+  const lump = requireUncompressedLump(header, index);
   if (lump.length % structBytes !== 0) {
     throw new BspFormatError(
       `${header.path}: lump ${index} (${lump.name ?? index}) is ${lump.length} bytes, not a ` +

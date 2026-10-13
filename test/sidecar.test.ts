@@ -23,7 +23,7 @@ describe("sidecar client, when it is not installed", () => {
     const status = await probeSidecar(broken);
     expect(status.installed).toBe(false);
     expect(status.ok).toBe(false);
-    expect(status.reason).toContain("setup.sh");
+    expect(status.reason).toMatch(/setup\.(sh|ps1)/);
   });
 
   it("callSidecar throws, and says how to fix it", async () => {
@@ -31,7 +31,7 @@ describe("sidecar client, when it is not installed", () => {
     // call path and non-fatal on the probe path. If both merely reported, a real call
     // would return undefined and the failure would surface far from its cause.
     await expect(callSidecar("health", {}, broken)).rejects.toThrow(SidecarError);
-    await expect(callSidecar("health", {}, broken)).rejects.toThrow(/setup\.sh/);
+    await expect(callSidecar("health", {}, broken)).rejects.toThrow(/setup\.(sh|ps1)/);
   });
 });
 

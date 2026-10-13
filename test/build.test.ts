@@ -258,9 +258,10 @@ describe("write_vmf_solid", () => {
 
   it("adds to a brush entity when given its id", async () => {
     writeFileSync(target, probe());
+    const eol = probe().includes("\r\n") ? "\r\n" : "\n";
     const withEntity = readFileSync(target, "utf8").replace(
-      /^world\n/m,
-      'entity\n{\n\t"id" "900"\n\t"classname" "func_detail"\n}\nworld\n',
+      new RegExp(`^world${eol}`, "m"),
+      `entity${eol}{${eol}\t"id" "900"${eol}\t"classname" "func_detail"${eol}}${eol}world${eol}`,
     );
     writeFileSync(target, withEntity);
     const out = z.object(writeVmfSolidTool.outputSchema!).parse(

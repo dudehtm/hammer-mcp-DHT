@@ -27,6 +27,41 @@ export class KvSyntaxError extends Error {
   }
 }
 
+export class KvValueError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KvValueError";
+  }
+}
+
+/**
+ * Checks text before it is placed inside a quoted KeyValues pair.
+ *
+ * This grammar has no escape syntax. Quotes and line breaks therefore cannot be represented
+ * safely, and NUL would terminate consumers that treat VMF text as a C string. Backslashes
+ * and other control characters such as Hammer's ESC output separator remain literal.
+ */
+export function assertWritableValue(what: string, value: string): void {
+  if (value.includes('"')) {
+    throw new KvValueError(
+      `a ${what} cannot contain a quote: KeyValues has no escape syntax, so ` +
+        `${JSON.stringify(value)} would be cut short at the quote`,
+    );
+  }
+  if (/\r|\n/.test(value)) {
+    throw new KvValueError(
+      `a ${what} cannot contain a line break: it would end the value and leave the ` +
+        `KeyValues document unreadable`,
+    );
+  }
+  if (value.includes("\0")) {
+    throw new KvValueError(
+      `a ${what} cannot contain NUL: it would terminate the KeyValues text for consumers ` +
+        `that read it as a C string`,
+    );
+  }
+}
+
 /** 1-based line number of `offset`, for error messages only. */
 export function lineOf(source: string, offset: number): number {
   let line = 1;
@@ -85,7 +120,7 @@ export function lex(source: string): Token[] {
       while (i < source.length && source[i] !== '"') {
         // A newline inside a quoted string means the closing quote is missing; say so
         // where it started rather than swallowing the rest of the file.
-        if (source[i] === "\n") {
+        if (source[i] === "\n" || source[i] === "\r") {
           throw new KvSyntaxError("unterminated quoted string", start, source);
         }
         i++;

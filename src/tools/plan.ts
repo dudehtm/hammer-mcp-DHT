@@ -62,6 +62,14 @@ export const renderVmfPlanTool = defineTool({
     width: z.number().int().min(120).max(2000).default(900),
     height: z.number().int().min(120).max(2000).default(900),
     grid: z.number().min(16).max(4096).default(512).describe("Grid spacing, and the scale bar's length."),
+    analysisStep: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "Voxel size for room/leak analysis, independent of the drawn grid. Supported values: " +
+          "16, 32 or 64 units. Omit to adapt automatically when 16 exceeds the cell budget.",
+      ),
     rooms: z.boolean().default(true).describe("Outline rooms and dimension the doorways."),
     seeds: z.array(z.array(z.number()).length(3)).optional(),
     svg: z.boolean().default(false).describe("Also return the SVG text. It can be long."),
@@ -72,6 +80,7 @@ export const renderVmfPlanTool = defineTool({
     unitsPerPixel: z.number(),
     pageWidth: z.number(),
     pageHeight: z.number(),
+    analysisStep: z.number().nullable(),
     brushesCut: z.number(),
     sectionAreaUnits: z.number(),
     roomCount: z.number(),
@@ -114,6 +123,7 @@ export const renderVmfPlanTool = defineTool({
       maxWidth: args.width,
       maxHeight: args.height,
       grid: args.grid,
+      analysisStep: args.analysisStep,
       rooms: args.rooms,
     });
 
@@ -134,6 +144,7 @@ export const renderVmfPlanTool = defineTool({
       unitsPerPixel: plan.list.page.unitsPerPixel,
       pageWidth: plan.list.page.width,
       pageHeight: plan.list.page.height,
+      analysisStep: plan.analysisStep,
       brushesCut: plan.brushesCut,
       sectionAreaUnits: Math.round(plan.sectionArea),
       roomCount: plan.rooms?.rooms.length ?? 0,

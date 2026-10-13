@@ -70,6 +70,19 @@ describe("overallVerdict", () => {
 });
 
 describe("reportMap", () => {
+  it("skips unverified branch ceilings instead of applying stock Source limits", () => {
+    const r = reportMap(PROBE, SOURCE_STOCK, { branch: "l4d2" });
+    expect(r.engine).toEqual({ branch: "l4d2", limitsVerified: false, limitSource: null });
+    expect(r.criteria.some((criterion) => criterion.id.startsWith("lump-fill:"))).toBe(false);
+    expect(find(r, "lump-limits")?.verdict).toBe("skipped");
+    expect(find(r, "edicts")?.verdict).toBe("skipped");
+    expect(r.profile.description).toMatch(/no verified lump ceilings/i);
+
+    const darkRp = reportMap(PROBE, GMOD_DARKRP, { branch: "l4d2" });
+    expect(find(darkRp, "cubemaps")?.verdict).toBe("skipped");
+    expect(find(darkRp, "cubemaps")?.message).toMatch(/not verified/);
+  });
+
   it("passes the probe against stock limits, and says vvis ran", () => {
     const r = reportMap(PROBE, SOURCE_STOCK);
     expect(r.overall).not.toBe("fail");
@@ -133,6 +146,19 @@ describe("reportMap", () => {
 });
 
 describe("read_map_report", () => {
+  it("reports the requested L4D2 branch without borrowing stock ceilings", async () => {
+    const out = (await readMapReportTool.handler(
+      { path: PROBE, game: "l4d2" },
+      ctx,
+    )) as {
+      engine: { branch: string; limitsVerified: boolean; limitSource: string | null };
+      criteria: Array<{ id: string; verdict: string }>;
+    };
+    expect(out.engine).toEqual({ branch: "l4d2", limitsVerified: false, limitSource: null });
+    expect(out.criteria.some((criterion) => criterion.id.startsWith("lump-fill:"))).toBe(false);
+    expect(out.criteria.find((criterion) => criterion.id === "edicts")?.verdict).toBe("skipped");
+  });
+
   it("refuses an unknown profile and names the ones that exist", () => {
     expect(() => readMapReportTool.handler({ path: PROBE, profile: "nope" }, ctx)).toThrow(
       /source-stock, gmod-darkrp/,

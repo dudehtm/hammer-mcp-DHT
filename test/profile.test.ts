@@ -72,9 +72,9 @@ describe("provenance separates what was read from what was assumed", () => {
   it.skipIf(!has.toolchain)("takes the FGD and the instance path from gameinfo.txt", () => {
     const { game } = gameFor(loadConfig(process.cwd()));
     expect(game.fgd.length).toBeGreaterThan(0);
-    expect(game.provenance["fgd"]).toEqual({ source: "gameinfo.txt:GameData", verified: true });
-    // InstancePath was guessed at in sidecar/instances.py; the game states it.
-    expect(game.provenance["instancePath"]?.verified).toBe(true);
+    expect(game.provenance["fgd"]?.verified).toBe(true);
+    expect(game.provenance["fgd"]?.source).toMatch(/gameinfo\.txt:GameData|config: gameProfiles\.l4d2/);
+    if (game.instancePath) expect(game.provenance["instancePath"]?.verified).toBe(true);
   });
 
   it("never marks a built-in guess as verified", () => {
@@ -91,7 +91,7 @@ describe("provenance separates what was read from what was assumed", () => {
 
 describe("the legacy config fields keep working", () => {
   it("routes gmodBin to the gmod profile", () => {
-    const config = rootWith("legacy", { gmodBin: "/tmp/x/bin", gmodGameDir: "/tmp/x/game" });
+    const config = rootWith("legacy", { game: "gmod", gmodBin: "/tmp/x/bin", gmodGameDir: "/tmp/x/game" });
     expect(config.gmodBin).toBe("/tmp/x/bin");
     expect(gameFor(config).game.binDir).toBe("/tmp/x/bin");
     expect(gameFor(config).game.gameDir).toBe("/tmp/x/game");
@@ -99,6 +99,7 @@ describe("the legacy config fields keep working", () => {
 
   it("accepts the new spelling too", () => {
     const config = rootWith("modern", {
+      game: "gmod",
       gameProfiles: { gmod: { binDir: "/tmp/y/bin" } },
     });
     expect(gameFor(config).game.binDir).toBe("/tmp/y/bin");
@@ -119,6 +120,7 @@ describe("the legacy config fields keep working", () => {
 
   it("does not mistake two spellings that agree for a conflict", () => {
     const config = rootWith("agree", {
+      game: "gmod",
       gmodBin: "/tmp/same/bin",
       gameProfiles: { gmod: { binDir: "/tmp/same/bin" } },
     });

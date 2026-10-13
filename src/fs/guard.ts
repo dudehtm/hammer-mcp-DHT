@@ -36,6 +36,19 @@ export class WriteRefused extends Error {
   }
 }
 
+export class WriteOutsideRoots extends Error {
+  constructor(
+    readonly path: string,
+    readonly roots: string[],
+  ) {
+    super(
+      `refusing to write ${path}: it is outside the configured write roots. ` +
+        `Allowed roots: ${roots.join(", ")}`,
+    );
+    this.name = "WriteOutsideRoots";
+  }
+}
+
 /**
  * Resolves a path through symlinks as far as it exists.
  *
@@ -76,6 +89,16 @@ export function assertWritable(path: string, config: Config): string {
 
   for (const tree of FORBIDDEN_TREES) {
     if (isUnder(target, resolve(root, tree))) throw new WriteRefused(target, tree);
+  }
+
+  const configuredRoots = config.writeRoots ?? [];
+  if (configuredRoots.length > 0) {
+    const roots = configuredRoots.map((candidate) =>
+      realResolve(isAbsolute(candidate) ? candidate : resolve(root, candidate)),
+    );
+    if (!roots.some((allowed) => isUnder(target, allowed))) {
+      throw new WriteOutsideRoots(target, roots);
+    }
   }
   return target;
 }

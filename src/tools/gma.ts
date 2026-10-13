@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { readGma, readGmaEntry } from "../gma/read.js";
 import { assertWritable } from "../fs/guard.js";
@@ -139,11 +139,16 @@ export const runGmaExtractTool = defineTool({
     const extracted: Array<{ path: string; bytes: number; wroteTo: string }> = [];
     let totalBytes = 0;
     for (const entry of matched) {
-      const relative = args.flatten ? entry.path.split("/").pop()! : entry.path;
-      const target = resolve(destination, relative);
+      const entryPath = args.flatten ? entry.path.split("/").pop()! : entry.path;
+      const target = resolve(destination, entryPath);
       // An archive is untrusted input: a path of `../../etc/thing` inside one would
       // otherwise write wherever it liked.
-      if (target !== destination && !target.startsWith(destination + "/")) {
+      const fromDestination = relative(destination, target);
+      if (
+        fromDestination === ".." ||
+        fromDestination.startsWith(`..${sep}`) ||
+        isAbsolute(fromDestination)
+      ) {
         throw new Error(
           `refusing to extract ${JSON.stringify(entry.path)}: it resolves outside the ` +
             `destination directory.`,

@@ -83,7 +83,10 @@ export function readNavHeader(path: string): NavHeader {
       at += 2 + length;
     }
     if (version >= 11) at += 1; // hasUnnamedAreas
-    areaCount = view.getUint32(at, true);
+    const reported = view.getUint32(at, true);
+    // Each area needs at least its four-byte ID. If even that lower bound exceeds the
+    // file, this branch's header layout differs and the count is unknown, not enormous.
+    areaCount = reported <= Math.floor(buf.length / 4) ? reported : null;
   } catch {
     placeCount = null;
     areaCount = null;

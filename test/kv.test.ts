@@ -33,6 +33,7 @@ describe("lexer", () => {
 
   it("reports an unterminated string where it started", () => {
     expect(() => lex('"id" "1\nnext')).toThrow(KvSyntaxError);
+    expect(() => lex('"id" "1\rnext')).toThrow(KvSyntaxError);
   });
 });
 

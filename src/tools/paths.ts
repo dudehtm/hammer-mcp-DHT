@@ -100,7 +100,7 @@ export const GAME = z
   .string()
   .optional()
   .describe(
-    "Game profile id (gmod, css, tf2, ...). Defaults to the configured one. " +
+    "Game profile id (l4d2 by default; other Source profiles remain available). " +
       "read_source_games lists what is installed here.",
   );
 

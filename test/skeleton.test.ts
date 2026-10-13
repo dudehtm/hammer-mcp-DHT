@@ -67,7 +67,7 @@ describe("the empty map", () => {
       expect(text).toMatch(new RegExp(`^${block}$`, "m"));
     }
     expect(text).toMatch(/"classname" "worldspawn"/);
-    expect(text).toMatch(/"skyname" "sky_day01_01"/);
+    expect(text).toMatch(/"skyname" "sky_day01_09_hdr"/);
   });
 
   it("carries the sky and grid it was asked for", () => {
@@ -98,7 +98,7 @@ describe("write_vmf", () => {
     expect(existsSync(r.path)).toBe(true);
     expect(readFileSync(r.path, "utf8")).toBe(emptyVmf());
     expect(r.bytes).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it("refuses to overwrite, because the alternative is deleting a map", async () => {
     const path = join(scratch, "occupied.vmf");

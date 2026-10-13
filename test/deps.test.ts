@@ -16,7 +16,7 @@ const run = async (path: string, limit = 3000) =>
   shape.parse(await readMapDependenciesTool.handler({ path, limit }, ctx));
 
 describe.skipIf(!has.sidecar)("read_map_dependencies", () => {
-  it("resolves the probe, and finds nothing missing", async () => {
+  it.skipIf(!has.gmodContent)("resolves the probe, and finds nothing missing", async () => {
     const out = await run(PROBE);
     expect(out.materialCount).toBeGreaterThan(0);
     expect(out.missing).toEqual([]);

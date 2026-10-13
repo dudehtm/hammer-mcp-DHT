@@ -12,9 +12,9 @@
  *
  * - `mapversion` is 1 and `editorversion` 400, matching the fixtures this repository
  *   already compiles, rather than a version claiming to be a Hammer nobody ran.
- * - `skyname` is a parameter with `sky_day01_01` as its default -- Source's own -- rather
- *   than being omitted. A map with no `skyname` compiles and renders its sky as the last
- *   one the engine loaded.
+ * - `skyname` defaults to `sky_day01_09_hdr`, whose six faces were checked in this
+ *   installation of L4D2 on 2026-10-12. A map with no `skyname` compiles and renders
+ *   whichever sky the engine last loaded.
  *
  * The `world` block is the only one that has to be here for the other writers to work. The
  * other four are written because Hammer writes them and their absence is the kind of
@@ -22,13 +22,13 @@
  */
 
 export interface SkeletonOptions {
-  /** The sky the map uses. Source's own default, not omitted -- see above. */
+  /** The sky the map uses. The L4D2 default is explicit; see above. */
   skyname?: string;
   /** Hammer's grid, in units. Cosmetic: it is what an editor opens the file showing. */
   gridSpacing?: number;
 }
 
-export const DEFAULT_SKYNAME = "sky_day01_01";
+export const DEFAULT_SKYNAME = "sky_day01_09_hdr";
 export const DEFAULT_GRID = 64;
 
 /**

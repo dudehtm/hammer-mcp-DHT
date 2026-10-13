@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { z } from "zod";
 import { discoverSourceInstalls, libraryPaths, steamRoots } from "../games/steam.js";
 import { defineTool } from "../mcp/registry.js";
@@ -60,7 +61,7 @@ export const readSourceGames = defineTool({
         betaBranch: i.app.betaKey,
         mods: i.mods.map((m) => ({
           dir: m.dir,
-          gameDir: `${i.app.gameRoot}/${m.dir}`,
+          gameDir: join(i.app.gameRoot as string, m.dir),
           displayName: m.displayName,
           steamAppId: m.steamAppId,
           fgd: m.fgd,
@@ -70,7 +71,7 @@ export const readSourceGames = defineTool({
         plusplus: i.plusplus,
       })),
       note:
-        "Presence is read from disk; nothing here claims a binary will run under wine, and " +
+        "Presence is read from disk; nothing here claims a binary will run through the configured backend, and " +
         "no engine branch is inferred. A game whose toolchain dir is null simply has no bin/ " +
         "-- several modern Source games ship their tools in a separate app.",
     };

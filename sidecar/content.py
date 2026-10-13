@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from typing import Any
+from typing import Any, Iterator
 
 # A search that returns everything is not a search, and serialising 40 000 names through
 # the transport would cost more than the caller could use.
@@ -45,15 +45,13 @@ def _mount(game_dir: str | None) -> tuple[Any, str | None]:
         return None, f"{type(exc).__name__}: {exc}"
 
 
-def _walk(fsys: Any) -> list[str]:
-    """Every file the mounted chain can see, as engine-relative paths."""
-    out: list[str] = []
+def _walk(fsys: Any) -> Iterator[str]:
+    """Yields files the mounted chain can see, as engine-relative paths."""
     for f in fsys:
         try:
-            out.append(f.path.replace("\\", "/"))
+            yield f.path.replace("\\", "/")
         except Exception:  # noqa: BLE001,S112
             continue
-    return out
 
 
 def _searchable(rel: str, prefix: str) -> str:
@@ -175,7 +173,8 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
     game_dir = req.get("gameDir")
     pattern = str(req.get("pattern", "")).strip()
     kind = req.get("kind", "material")
-    limit = min(int(req.get("limit", DEFAULT_LIMIT)), MAX_LIMIT)
+    offset = max(0, int(req.get("offset", 0)))
+    limit = max(1, min(int(req.get("limit", DEFAULT_LIMIT)), MAX_LIMIT))
     want_details = bool(req.get("details", False))
 
     if not pattern:
@@ -189,6 +188,8 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
             "mountError": None,
             "pattern": pattern,
             "kind": kind,
+            "offset": offset,
+            "limit": limit,
             "total": 0,
             "results": [],
             "refused": "a search needs a pattern; an empty one would return the whole game",
@@ -202,6 +203,8 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
             "mountError": mount_error,
             "pattern": pattern,
             "kind": kind,
+            "offset": offset,
+            "limit": limit,
             "total": 0,
             "results": [],
             "note": "nothing was searched, so an empty result here says nothing about the game",
@@ -221,7 +224,7 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
 
     hits.sort()
     total = len(hits)
-    shown = hits[:limit]
+    shown = hits[offset : offset + limit]
 
     results: list[dict[str, Any]] = []
     for rel in shown:
@@ -238,9 +241,11 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
         "mountError": None,
         "pattern": pattern,
         "kind": kind,
+        "offset": offset,
+        "limit": limit,
         "total": total,
         "shown": len(results),
-        "truncated": total > len(results),
+        "truncated": offset + len(results) < total,
         "results": results,
         "note": (
             "names only unless details was asked for: a Garry's Mod install holds tens of "

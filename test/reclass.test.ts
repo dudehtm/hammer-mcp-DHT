@@ -95,8 +95,11 @@ describe("reclassSolids", () => {
     // Hammer wraps a visgroup-hidden brush in `hidden { solid { ... } }`. Moving it out
     // would make it visible again, which is not what the caller asked for.
     const text = probe().replace(
-      /(\tsolid\n\t\{\n\t\t"id" "21"[\s\S]*?\n\t\}\n)/,
-      "\thidden\n\t{\n$1\t}\n",
+      /(\tsolid\r?\n\t\{\r?\n\t\t"id" "21"[\s\S]*?\r?\n\t\}\r?\n)/,
+      (block) => {
+        const eol = block.includes("\r\n") ? "\r\n" : "\n";
+        return `\thidden${eol}\t{${eol}${block}\t}${eol}`;
+      },
     );
     expect(owners(text)).toEqual({ world: 6 });
     expect(() => reclassSolids(text, [WALL], { to: "entity", classname: "func_detail" })).toThrow(
@@ -116,7 +119,7 @@ describe("reclassSolids", () => {
     const after = reclassSolids(before, [WALL], { to: "entity", classname: "func_detail" }).text;
     // The moved block is cut from one place and appears at another; what must hold is that
     // its text is identical, not merely equivalent.
-    const block = before.match(/\tsolid\n\t\{\n\t\t"id" "21"[\s\S]*?\n\t\}\n/)![0];
+    const block = before.match(/\tsolid\r?\n\t\{\r?\n\t\t"id" "21"[\s\S]*?\r?\n\t\}\r?\n/)![0];
     expect(after).toContain(block);
     expect(after.split(block)).toHaveLength(2);
   });

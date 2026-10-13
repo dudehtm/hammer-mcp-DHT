@@ -5,8 +5,8 @@
 
 An MCP server for Source-engine map work. It reads `.vmf` and `.bsp` files, lints a map against
 the game's own FGD, edits a `.vmf` without reformatting it, patches a compiled map's entities
-without recompiling, drives the compilers under Wine — **Hammer++ by default**, stock on demand or
-as a fallback — and measures a map
+without recompiling, drives the compilers natively on Windows or under Wine on POSIX — **Hammer++
+by default where its compiler binaries exist**, stock on demand or as a fallback — and measures a map
 against the limits of the format.
 
 **It never talks to a running engine.** It reads and writes files and runs compilers, and nothing
@@ -41,7 +41,7 @@ flowchart LR
   VMF[".vmf"] --> LINT["read_vmf_lint<br/>against the game's FGD"]
   LINT --> EDIT["edit_vmf<br/>splice, never reserialise"]
   EDIT --> VMF
-  LINT --> C["vbsp · vvis · vrad<br/>under Wine"]
+  LINT --> C["vbsp · vvis · vrad<br/>native or Wine"]
   C --> BSP[".bsp"]
   BSP --> M["measure · pack · patch entities"]
   M -. never .-x ENG["a running engine"]
@@ -56,7 +56,7 @@ flowchart LR
 | **Edit** | entities, keyvalues and outputs of a `.vmf`, by splicing byte ranges — untouched bytes stay untouched |
 | **Build** | brushes from a shape description, wound and textured the way vbsp expects, refused unless they close |
 | **Optimise** | `func_detail`, hint brushes including diagonal ones, per-face lightmap scale — the decisions a compiled map no longer contains |
-| **Compile** | vbsp/vvis/vrad under Wine, findings per stage, and a leak turned into a named entity |
+| **Compile** | vbsp/vvis/vrad through the configured backend, findings per stage, and a leak turned into a named entity |
 | **Ship** | resolve every asset a map references and find what will be missing, pack them into a `.bsp` — by hand or derived from the map — check a nav mesh still matches |
 | **Open** | a Workshop `.gma`: read its index, pull one map out of a gigabyte without unpacking the rest |
 | **Patch without recompiling** | rewrite a compiled map's entity list through a `.lmp` |
@@ -94,6 +94,15 @@ Two things this design refuses to do:
   uncalibrated, so it reports `skipped` and says so. A confident verdict about nothing is
   worse than an admitted gap, and the same goes for the overall verdict: a run that judged
   nothing comes back `skipped`, never `pass`.
+
+### L4D2 branch boundary
+
+The L4D2 profile has now been observed on this machine: stock `VBSP`, `VVIS` and `VRAD` built
+`bol_test_box`, and its BSP is version 21 with the L4D2 lump-descriptor layout. The reader reports
+that layout directly. Branch-specific lump ceilings and runtime edict limits are not yet verified,
+so `read_map_geometry` and `read_map_report` return structural measurements but skip SDK 2013
+percentages when the selected branch is L4D2. This is evidence for this installation and test map,
+not a claim that all L4D2 toolchains behave identically.
 
 ## Building brushes, and why that was refused until now
 
@@ -469,10 +478,10 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 |---|---|---|---|
 | `health` | `local` | | State of the toolchain: game profile, binaries, FGDs, Wine, sidecar — and how many tools this build serves, and whether it is older than the source |
 | `read_source_games` | `local` | | Source games installed here, read from Steam and from `gameinfo.txt` |
-| `read_bsp_info` | `map` | | Header of a `.bsp`: ident, version, mapRevision, all 64 lumps, and whether vrad produced HDR |
+| `read_bsp_info` | `map` | | Header of a `.bsp`: ident, version, descriptor layout, mapRevision, all 64 lumps, and whether vrad produced HDR |
 | `read_bsp_entities` | `map` | | Entities of lump 0, filtered and paginated, with a classname histogram |
 | `read_map_extents` | `map` | | Real world extents (lump 14), in Hammer units and in metres |
-| `read_map_geometry` | `map` | | How full each lump is, and how much room is left before vbsp's ceiling |
+| `read_map_geometry` | `map` | | How full each lump is; applies ceilings only when verified for the selected engine branch |
 | `read_prop_survey` | `map` | | Prop inventory, and which `prop_dynamic` are dynamic for nothing |
 | `read_pakfile` | `map` | | Contents of the embedded pakfile (lump 40), and the compile evidence it carries |
 | `read_sightlines` | `map` | | Longest clear lines of sight, traced against the world tree |
@@ -480,10 +489,10 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `read_materials` | `map` | | Material table of a compiled map, and how many `TEXINFO` reference each one |
 | `read_lightmap_budget` | `map` | | Where a compiled map's lightmap resolution went: total luxels, distribution, costliest faces |
 | `read_visleaf_stats` | `map` | | Quality of a compiled map's visibility split: leaf/cluster counts, leaf volume distribution |
-| `read_map_report` | `map` | | Judges a map against a budget profile: a verdict per criterion, not another number |
+| `read_map_report` | `map` | | Judges a map against a budget profile and reports whether branch-specific limits were verified |
 | `read_fgd_class` | `map` | | A class's schema per the game's FGD: keyvalues, inputs, outputs |
 | `read_vmf` | `map` | | Entities, outputs and counts of a `.vmf`. `collapseInstances` expands `func_instance` |
-| `read_game_content` | `map` | | Hammer's texture and model browsers: what the game actually has, by name |
+| `read_game_content` | `map` | | Hammer's texture and model browsers: what the game actually has, by name, with stable pagination |
 | `read_model_info` | `map` | | A prop's hull, skins, sequences and materials, before you place it |
 | `read_vmf_solids` | `map` | | Rebuilds every brush from its planes: is it closed, convex, in the world, on a grid |
 | `read_displacements` | `map` | | The terrain grids of a `.vmf`, their vertices in world space, and their seams |
@@ -512,6 +521,8 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `read_entity_report` | `map` | | Hammer's Entity Report: every entity and its keyvalues, filterable |
 | `validate_io` | `map` | | Every output checked against the FGD — the wire that fires into nothing |
 | `read_vmf_lint` | `map` | | What will break at compile time or in game, before compiling |
+| `check_l4d2_map` | `map` | | L4D2 VMF preflight: FGD, I/O and survivor, Director, transition or finale marker review |
+| `check_l4d2_mission` | `map` | | Checks mission chapter references, BSP presence and optional addoninfo.txt metadata |
 | `read_vmf_trace` | `map` | | Traces a ray or a swept player hull through an **uncompiled** `.vmf`: what is in the way, how far, which face |
 | `read_vmf_visibility` | `map` | | Whether named pairs of points can see each other, and the brush that blocks the ones that cannot |
 | `read_vmf_nearest_surface` | `map` | | Exact distance from a point to the nearest surface, and which face it belongs to |
@@ -519,7 +530,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `read_vmf_leak` | `map` | | Whether a `.vmf` seals, **without compiling it**, with the path out |
 | `read_vmf_rooms` | `map` | | The rooms of a `.vmf`, the doorways between them and how they connect — every merge it made with the reason, **the doorway that merge stopped reporting**, and the standable places no walk reaches. Each doorway carries both its cell-count estimate and its **measured** width, from a swept player hull at the same col |
 | `read_vmf_surfaces` | `map` | | Faces sorted into floor, wall, ceiling — and which of them a person could touch |
-| `render_vmf_plan` | `map` | | A **dimensioned floor plan**: rooms, areas, doorway widths as measured rather than counted, grid, scale bar, north |
+| `render_vmf_plan` | `map` | | A **dimensioned floor plan** with independent analysis resolution; large maps adapt from 16 to 32 or 64 units and report it |
 | `measure_vmf_clearance` | `map` | | Free width and headroom at a point, measured with a **swept player hull**, not a ray. Says when no body fits there rather than reporting the hull's own width |
 | `measure_vmf_approach` | `map` | | How much clear room a person has in front of each entity — the door that opens into a wall |
 | `read_vmf_sightlines` | `map` | | Longest clear sight lines in an **uncompiled** `.vmf`, sampled where a person can stand |
@@ -530,7 +541,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `run_cubemap2hdr` | `local` | ● | Turns an LDR cubemap into the HDR one Source loads in HDR mode. Refuses anything but DXT1 up front, naming the format the file actually is || `run_vtf_convert` | `local` | ● | Turns a `.tga`/`.png`/`.bmp` into a `.vtf`, and reports the format that actually came out rather than the one asked for. Drives VTFCmd from ficool2's VTFEdit++ |
 | `run_tga2skybox` | `local` | ● | Builds a cubemap `.vtf` from six TGA faces, LDR **and** HDR — the half of cubemap work that does not need the engine running. Drives ficool2's `tga2skybox` |
 | `run_bsp_rename` | `local` | ● | Renames a compiled `.bsp` **and the content packed inside it** — the nodegraph, cubemap patches, soundscripts. Drives ficool2's `bsp_rename`, a separate download; `health` says whether it is there |
-| `run_compile` | `local` | ● | vbsp, vvis and vrad under Wine, findings per stage. Drives the **Hammer++ chain by default**, with its culling flags; falls back to the stock compilers when Hammer++ is absent and says which one ran |
+| `run_compile` | `local` | ● | vbsp, vvis and vrad through the native or Wine backend, findings per stage. Drives the **Hammer++ chain by default where installed**, with its culling flags; falls back to stock and says which chain ran |
 | `read_compile_log` | `map` | | Turns compiler output into findings, each with what the message actually means |
 | `read_leak` | `map` | | Turns `**** leaked ****` into a position and a named entity |
 | `read_map_dependencies` | `map` | | Every asset a map references, and whether each will be there: packed, from the game, or missing |
@@ -564,7 +575,7 @@ documented rather than filled, because no independent way to check the answer co
 
 The dated record of what was tried, measured, and got wrong:
 
-- [docs/gates.md](docs/gates.md) — the feasibility gates: do the compilers run under Wine, does
+- [docs/gates.md](docs/gates.md) — the feasibility gates: do the compilers run through the selected backend, does
   the engine honour a lump patch, does the Hammer++ chain behave like the stock one
 - [docs/measuring.md](docs/measuring.md) — what a 1.13 GB production map says about itself, and
   the three ways of sampling sightlines that all returned confident, wrong numbers
@@ -574,6 +585,8 @@ The dated record of what was tried, measured, and got wrong:
   profiles
 - [docs/architecture.md](docs/architecture.md) — why the write path is a splice, the write
   discipline, and shared plumbing
+- [docs/plans/2026-10-03-map-automation-roadmap.md](docs/plans/2026-10-03-map-automation-roadmap.md) —
+  future automation, reference reuse, prefab extraction and MCP boundaries
 - [docs/audits/fishke/](docs/audits/fishke/) — three production maps read end to end with this
   server: the raw readings, the analyses, and the adversarial pass that refuted two of their own
   conclusions
@@ -585,17 +598,43 @@ The dated record of what was tried, measured, and got wrong:
 
 | Field | Default |
 |---|---|
-| `game` | `gmod` — the profile used when a call does not name one |
+| `game` | `l4d2` — the profile used when a call does not name one |
 | `gameProfiles` | `{}` — per-profile overrides: `binDir`, `gameDir`, `plusPlusBinDir`, `fgd`, `branch` |
-| `backend` | `wine` |
+| `backend` | `native` on Windows, `wine` on POSIX |
 | `winePrefix` | `~/.wine` |
-| `sidecarPython` | `<stateDir>/sidecar-venv/bin/python` |
+| `sidecarPython` | `<stateDir>/sidecar-venv/Scripts/python.exe` on Windows, `bin/python` on POSIX |
+| `writeRoots` | `[]`; when non-empty, guarded writes must remain under these roots |
 | `externalToolsDir` | `<stateDir>/tools` — standalone tools this server drives, such as ficool2's `bsp_rename.exe`. They belong to no game install, so nothing can discover them; `health` lists which are present |
 | `toolAllowlist` | `[]` |
 
 **Normally there is nothing to configure**: paths come from discovery. `gameProfiles` is for what
 discovery cannot see — a game installed outside Steam, compilers shipped in a separate app, an
 engine branch we do not classify.
+
+For a native Windows L4D2 checkout, install the Node dependencies and sidecar, then set the
+deployment environment before starting the MCP client. `HAMMER_MCP_REPO` is the directory
+holding `.hammer-mcp/config.json`; map paths may be absolute and point to a separate campaign:
+
+```powershell
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+$env:HAMMER_MCP_REPO = 'C:\path\to\hammer-mcp-DHT'
+$env:HAMMER_MCP_GAME = 'l4d2'
+$env:HAMMER_MCP_BACKEND = 'native'
+powershell -ExecutionPolicy Bypass -File .\sidecar\setup.ps1
+```
+
+Set `gameProfiles.l4d2` as shown in `config.example.json` if Steam discovery does not
+find the install. `health` reports the resolved stock compilers, FGD, Hammer editor and
+Hammer++ editor separately. `hammerplusplus.exe` does not supply the separate
+`vbspplusplus.exe`, `vvisplusplus.exe` and `vradplusplus.exe` compiler chain. On this
+installation the stock L4D2 chain is available; `run_compile` reports a fallback when
+the Hammer++ chain is requested but unconfigured. Run `check_l4d2_map` on a VMF before
+compilation for FGD, I/O and chapter-marker review.
+
+`HAMMER_MCP_WRITE_ROOTS` accepts a platform-delimited list of relative or absolute write roots.
+OpenCode uses it to keep map sources, staging, runtime content, distributions and MCP state inside
+the campaign workspace.
 
 `gmodBin`, `gmodGameDir` and `gmodBinPlusPlus` are the older spelling of
 `gameProfiles.gmod.{binDir,gameDir,plusPlusBinDir}`. They still work. Setting both to different
@@ -610,7 +649,7 @@ pnpm test        # vitest
 pnpm typecheck   # tsc --noEmit, tests included
 ```
 
-Most of this suite is not unit tests: it drives the real compilers under Wine, the real Python
+Most of this suite is not unit tests: it drives the real compilers through the selected backend, the real Python
 sidecar and real maps. None of that ships with the repository, so `pnpm test` on a bare machine
 **skips** what it cannot run — and says so:
 

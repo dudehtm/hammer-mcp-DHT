@@ -26,6 +26,7 @@ import { HDR_LUMPS } from "../bsp/header.js";
 import { readLightmapBudget } from "../bsp/lightmap.js";
 import { readModels, worldExtents } from "../bsp/models.js";
 import { readVisleafStats } from "../bsp/visleaf.js";
+import type { EngineBranch } from "../games/profile.js";
 
 /** `LUMP_CUBEMAPS`, one record per `env_cubemap` vrad resolved. */
 const LUMP_CUBEMAPS = 42;
@@ -232,11 +233,21 @@ function skipped(id: string, what: string, unit: string, why: string): Criterion
 export interface MapReport {
   path: string;
   profile: { id: string; description: string };
+  engine: {
+    branch: EngineBranch;
+    limitsVerified: boolean;
+    limitSource: string | null;
+  };
   /** The worst verdict among the criteria. `skipped` never counts as a failure. */
   overall: Verdict;
   criteria: Criterion[];
   /** Counts by verdict, for a caller that wants the shape without walking the list. */
   summary: Record<Verdict, number>;
+}
+
+export interface ReportOptions {
+  /** Engine branch whose verified limits may be applied. */
+  branch?: EngineBranch;
 }
 
 /**
@@ -246,12 +257,31 @@ export interface MapReport {
  * on a map of any size -- the pakfile, which is most of a shipped map's bytes, is never
  * touched.
  */
-export function reportMap(path: string, profile: BudgetProfile): MapReport {
+export function reportMap(
+  path: string,
+  profile: BudgetProfile,
+  options: ReportOptions = {},
+): MapReport {
   const criteria: Criterion[] = [];
-  const geometry = readGeometry(path);
+  const geometry = readGeometry(path, options);
   const header = geometry.header;
+  const profileDescription = geometry.limitsVerified
+    ? profile.description
+    : `${profile.description} No verified lump ceilings or runtime edict limit exist for ` +
+      `engine branch ${geometry.branch}; those criteria are reported as skipped.`;
 
   // --- lump fill, one criterion per lump that has a known ceiling and a usable count ---
+  if (!geometry.limitsVerified) {
+    criteria.push(
+      skipped(
+        "lump-limits",
+        "compiled lump ceilings",
+        "limits",
+        `no verified lump ceilings exist for engine branch ${geometry.branch}; ` +
+          `SDK 2013 percentages are not applied`,
+      ),
+    );
+  }
   for (const lump of geometry.lumps) {
     if (lump.usedFraction === undefined || lump.limit === undefined) continue;
     const verdict = judge(lump.usedFraction, profile.lumpFill, "over");
@@ -278,7 +308,7 @@ export function reportMap(path: string, profile: BudgetProfile): MapReport {
 
   // --- edicts: the map's own entity count, before a single player connects ---
   const edictLimit = profile.edictLimit?.value ?? LIMITS.edicts;
-  if (profile.edicts) {
+  if (profile.edicts && geometry.limitsVerified) {
     const entities = readEntityLump(path).entities.length;
     const fraction = entities / edictLimit;
     criteria.push({
@@ -295,6 +325,16 @@ export function reportMap(path: string, profile: BudgetProfile): MapReport {
         (profile.edictLimit ? ` (${profile.edictLimit.source})` : ` (MAX_EDICTS, stock)`) +
         `. This is what the map costs empty; everything a gamemode spawns comes on top.`,
     });
+  } else if (profile.edicts) {
+    criteria.push(
+      skipped(
+        "edicts",
+        "entities in lump 0, against the runtime edict ceiling",
+        "fraction",
+        `no verified runtime edict ceiling exists for engine branch ${geometry.branch}; ` +
+          `the stock Source ceiling is not applied`,
+      ),
+    );
   }
 
   // --- did vvis actually run ---
@@ -425,30 +465,47 @@ export function reportMap(path: string, profile: BudgetProfile): MapReport {
   }
 
   if (profile.requireCubemaps) {
-    const cubemaps = geometry.lumps.find((l) => l.index === LUMP_CUBEMAPS)?.count ?? 0;
-    criteria.push({
-      id: "cubemaps",
-      what: "cubemaps built into the map",
-      verdict: cubemaps > 0 ? "pass" : "fail",
-      value: cubemaps,
-      unit: "samples",
-      warnAt: null,
-      failAt: 1,
-      direction: "under",
-      message:
-        cubemaps > 0
-          ? `${cubemaps} samples.`
-          : `None. Every specular surface falls back to the default cubemap, which is why a ` +
-            `map can look flat and mirror-black without any error appearing anywhere. ` +
-            `Building them needs the engine: buildcubemaps, through gmod-mcp.`,
-    });
+    if (!geometry.limitsVerified) {
+      criteria.push(
+        skipped(
+          "cubemaps",
+          "cubemaps built into the map",
+          "samples",
+          `the cubemap record size is not verified for engine branch ${geometry.branch}; ` +
+            `a missing count is not treated as zero`,
+        ),
+      );
+    } else {
+      const cubemaps = geometry.lumps.find((l) => l.index === LUMP_CUBEMAPS)?.count ?? 0;
+      criteria.push({
+        id: "cubemaps",
+        what: "cubemaps built into the map",
+        verdict: cubemaps > 0 ? "pass" : "fail",
+        value: cubemaps,
+        unit: "samples",
+        warnAt: null,
+        failAt: 1,
+        direction: "under",
+        message:
+          cubemaps > 0
+            ? `${cubemaps} samples.`
+            : `None. Every specular surface falls back to the default cubemap, which is why a ` +
+              `map can look flat and mirror-black without any error appearing anywhere. ` +
+              `Building them needs the engine: buildcubemaps, through gmod-mcp.`,
+      });
+    }
   }
 
   const summary: Record<Verdict, number> = { pass: 0, warn: 0, fail: 0, skipped: 0 };
   for (const c of criteria) summary[c.verdict]++;
   return {
     path: header.path,
-    profile: { id: profile.id, description: profile.description },
+    profile: { id: profile.id, description: profileDescription },
+    engine: {
+      branch: geometry.branch,
+      limitsVerified: geometry.limitsVerified,
+      limitSource: geometry.limitSource,
+    },
     overall: overallVerdict(summary),
     criteria,
     summary,

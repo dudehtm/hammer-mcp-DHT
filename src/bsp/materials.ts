@@ -1,4 +1,4 @@
-import { BspFormatError, readAt, readHeader, requireLump } from "./header.js";
+import { BspFormatError, readAt, readHeader, requireUncompressedLump } from "./header.js";
 import type { BspHeader, BspLump } from "./header.js";
 
 /** Lump indices this reader touches, named locally as `trace.ts` does for its own set. */
@@ -38,14 +38,7 @@ export interface MaterialReport {
 
 /** Refuses a lump this reader would otherwise decode wrong: compressed, or wrongly sized. */
 function guardLump(header: BspHeader, index: number, structBytes: number | null): BspLump {
-  const lump = requireLump(header, index);
-  if (lump.compressed) {
-    throw new BspFormatError(
-      `${header.path}: lump ${index} (${lump.name ?? index}) is individually LZMA-compressed; ` +
-        `refusing rather than decoding compressed bytes as records. It declares ` +
-        `${lump.declaredUncompressedBytes} uncompressed bytes, not verified here.`,
-    );
-  }
+  const lump = requireUncompressedLump(header, index);
   if (structBytes !== null && lump.length % structBytes !== 0) {
     throw new BspFormatError(
       `${header.path}: lump ${index} (${lump.name ?? index}) is ${lump.length} bytes, not a ` +

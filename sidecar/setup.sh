@@ -9,7 +9,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="${HAMMER_MCP_REPO:-$(cd "$here/../.." && pwd)}"
+repo_root="${HAMMER_MCP_REPO:-$(cd "$here/.." && pwd)}"
 venv="$repo_root/.hammer-mcp/sidecar-venv"
 
 if [[ ! -x "$venv/bin/python" ]]; then

@@ -11,6 +11,17 @@ const lump = (path: string, index: number) =>
   readGeometry(path).lumps.find((l) => l.index === index)!;
 
 describe("ceilings measured in bytes", () => {
+  it("does not borrow SDK 2013 ceilings for an uncalibrated branch", () => {
+    const report = readGeometry(join(FIXTURES, "hmcp_probe.bsp"), { branch: "l4d2" });
+    expect(report.branch).toBe("l4d2");
+    expect(report.limitsVerified).toBe(false);
+    expect(report.limitSource).toBeNull();
+    expect(report.nearLimit).toEqual([]);
+    expect(report.lumps.length).toBeGreaterThan(0);
+    expect(report.lumps.every((lump) => lump.count === null && lump.limit === undefined)).toBe(true);
+    expect(report.lumps[0]!.note).toMatch(/rather than borrowed from SDK 2013/);
+  });
+
   it("declares no ceiling it cannot evaluate", () => {
     // The fault this fixes. TEXDATA_STRING_DATA carried limit: 256000 with no record
     // size, so `count` was always null and the ceiling was never once applied -- a limit

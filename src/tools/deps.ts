@@ -85,9 +85,9 @@ export const readMapDependenciesTool = defineTool({
       caveat:
         "An asset resolved from a VPK ships only if the player has that game mounted -- a " +
         "Counter-Strike texture is fine on a machine with CS:S and a checkerboard on one " +
-        "without. An asset resolved as `game-loose` is worse: it sits on this disk and " +
-        "nowhere else, so it ships broken for everyone -- run_pack with auto:true packs " +
-        "exactly those. And `packedUnreferenced` " +
+        "without. A `game-loose` asset needs provenance review: it may be an official " +
+        "L4D2/DLC file or custom content found only on this computer. Pack custom content " +
+        "only after identifying it; do not redistribute Valve files. `packedUnreferenced` " +
         "means this walk did not reach it, which is weaker than unused: sounds, particles " +
         "and scripts are counted separately under notWalked precisely because they are not " +
         "followed. Nothing here is a delete list.",

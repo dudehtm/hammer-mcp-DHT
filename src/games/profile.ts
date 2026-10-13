@@ -12,10 +12,10 @@
  *    legacy `gmodBin` / `gmodGameDir` / `gmodBinPlusPlus` fields, which keep working and
  *    apply to the `gmod` profile.
  *
- * The `provenance` field is not decoration. Only one game has ever been measured here, so
- * a caller must be able to tell "this FGD name came out of gameinfo.txt" from "this mod
- * directory is a built-in guess nobody has run". A profile that flattened both into a
- * plain string would make the second indistinguishable from the first.
+ * The `provenance` field is not decoration. A caller must be able to tell "this FGD name came
+ * out of gameinfo.txt" from "this mod directory is a built-in guess nobody has run". A profile
+ * that flattened both into a plain string would make the second indistinguishable from the
+ * first. The profile note carries the narrower evidence boundary for branches such as L4D2.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -78,6 +78,8 @@ export interface ResolvedGame {
   scriptedEntityDirs: string[];
   /** Non-null when this profile cannot drive a compile, and why. */
   unusableForCompile: string | null;
+  /** Human-readable evidence boundary carried from the built-in profile. */
+  note?: string;
   provenance: Record<string, Provenance>;
 }
 
@@ -100,11 +102,10 @@ export type GameProfileOverride = z.infer<typeof GameProfileOverride>;
 /**
  * The built-in table, kept as small as honesty allows.
  *
- * Only `gmod` has been run here. The others carry appid, install directory and mod
- * directory and **nothing else** -- no FGD name, no lump-limit table, no Hammer++
- * directory. Those three are the kind of fact that is wrong loudly: point `-game` at a
- * directory that does not exist and the compiler says so in one line. An invented FGD
- * name or lump ceiling is wrong silently, which is why none is written here.
+ * The built-in table carries only facts discovery cannot produce. GMod has full local gate
+ * evidence; L4D2 now has a narrower compile/BSP observation, recorded in its note. The table
+ * still carries no FGD name, lump-limit table or Hammer++ directory. Those are the kind of
+ * facts that are wrong silently, which is why they remain discovery data.
  */
 export const BUILTIN_PROFILES: readonly BuiltinProfile[] = [
   {
@@ -159,7 +160,10 @@ export const BUILTIN_PROFILES: readonly BuiltinProfile[] = [
     installDir: "Left 4 Dead 2",
     modDir: "left4dead2",
     branch: "l4d2",
-    note: "Never run here. Its lump ceilings differ from sdk2013 and none has been read.",
+    note:
+      "Observed on this machine 2026-10-03: the game FGD was discovered, stock VBSP/VVIS/VRAD " +
+      "produced bol_test_box, and its BSP is version 21 with the L4D2 descriptor layout. " +
+      "NAV, bots, runtime playability and branch-specific lump ceilings remain unverified.",
   },
   {
     id: "portal2",
@@ -187,6 +191,7 @@ function fromBuiltin(b: BuiltinProfile): ResolvedGame {
     instancePath: null,
     scriptedEntityDirs: b.scriptedEntityDirs ?? [],
     unusableForCompile: `${b.displayName} was not found on this machine`,
+    note: b.note,
     provenance: {
       steamAppId: { source: "builtin table", verified: false },
       modDir: { source: "builtin table", verified: false },

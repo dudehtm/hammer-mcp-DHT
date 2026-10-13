@@ -20,9 +20,8 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { run } from "@projectsociety/mcp-core";
 import type { Config } from "../config.js";
-import { ToolchainError } from "./wine.js";
+import { ToolchainError, runWindowsProcess } from "./wine.js";
 
 export interface ExternalRun {
   stdout: string;
@@ -45,7 +44,7 @@ export function externalToolPresent(config: Config, exe: string): boolean {
 }
 
 /**
- * Runs one external Windows tool under wine.
+ * Runs one external Windows tool through the selected backend.
  *
  * Same two load-bearing settings as the compilers, for the same measured reasons: the
  * working directory is the tool's own, and `WINEDEBUG=-all` keeps wine's `fixme:` lines
@@ -66,18 +65,11 @@ export async function runExternalTool(
         `set externalToolsDir to where you keep it. health lists which of these are present.`,
     );
   }
-  if (config.backend !== "wine") {
-    throw new ToolchainError(
-      `backend "${config.backend}" is not implemented; only wine is proven here`,
-    );
-  }
-
   const started = Date.now();
-  const result = await run("wine", [binary, ...args], {
+  const result = await runWindowsProcess(config, binary, args, {
     cwd: options.where ?? config.externalToolsDir!,
     timeoutMs: options.timeoutMs ?? 300_000,
     ...(options.stdin === undefined ? {} : { input: options.stdin }),
-    env: { ...process.env, WINEPREFIX: config.winePrefix, WINEDEBUG: "-all" },
   });
 
   return {

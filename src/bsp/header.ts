@@ -89,6 +89,9 @@ export const HDR_LUMPS = [53, 54, 58] as const;
 /** First four bytes of an individually compressed lump. */
 export const LZMA_MAGIC = "LZMA";
 
+/** Descriptor field order used by the BSP variants this reader accepts. */
+export type BspDescriptorLayout = "source" | "l4d2";
+
 export interface BspLump {
   index: number;
   name: string | undefined;
@@ -119,6 +122,8 @@ export interface BspHeader {
   path: string;
   ident: string;
   version: number;
+  /** Descriptor layout selected by structural validation, not by BSP version alone. */
+  layout: BspDescriptorLayout;
   /** Copy this into any `.lmp` patch built against this BSP. */
   mapRevision: number;
   fileSize: number;
@@ -134,15 +139,120 @@ export class BspFormatError extends Error {
 
 /** Reads exactly `length` bytes at `offset`, without mapping the file. */
 export function readAt(path: string, offset: number, length: number): Buffer {
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new BspFormatError(`${path}: cannot read at invalid offset ${offset}`);
+  }
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new BspFormatError(`${path}: cannot read invalid length ${length}`);
+  }
   const buf = Buffer.alloc(length);
   const fd = openSync(path, "r");
   try {
     const got = readSync(fd, buf, 0, length, offset);
-    if (got < length) return buf.subarray(0, got);
+    if (got < length) {
+      throw new BspFormatError(
+        `${path}: short read at offset ${offset}: expected ${length} bytes, got ${got}`,
+      );
+    }
     return buf;
   } finally {
     closeSync(fd);
   }
+}
+
+/** Creates normalized lumps from one possible descriptor field order. */
+function decodeLumps(
+  view: DataView,
+  layout: BspDescriptorLayout,
+): BspLump[] {
+  const lumps: BspLump[] = [];
+  for (let i = 0; i < LUMP_COUNT; i++) {
+    const at = 8 + i * 16;
+    const first = view.getInt32(at, true);
+    const second = view.getInt32(at + 4, true);
+    const third = view.getInt32(at + 8, true);
+    const offset = layout === "source" ? first : second;
+    const length = layout === "source" ? second : third;
+    const version = layout === "source" ? third : first;
+    lumps.push({
+      index: i,
+      name: LUMP_NAMES[i],
+      offset,
+      length,
+      version,
+      fourCC: view.getInt32(at + 12, true),
+      compressed: false,
+      declaredUncompressedBytes: null,
+    });
+  }
+  return lumps;
+}
+
+/** Validates directory-level invariants shared by every supported BSP layout. */
+function validateLumps(
+  path: string,
+  fileSize: number,
+  lumps: readonly BspLump[],
+): string[] {
+  const errors: string[] = [];
+  const occupied: Array<{ lump: BspLump; end: number }> = [];
+
+  for (const lump of lumps) {
+    if (!Number.isSafeInteger(lump.offset) || lump.offset < 0) {
+      errors.push(`lump ${lump.index} has a negative or invalid offset ${lump.offset}`);
+      continue;
+    }
+    if (!Number.isSafeInteger(lump.length) || lump.length < 0) {
+      errors.push(`lump ${lump.index} has a negative or invalid length ${lump.length}`);
+      continue;
+    }
+    if (lump.offset > fileSize) {
+      errors.push(`lump ${lump.index} starts at ${lump.offset}, past file size ${fileSize}`);
+      continue;
+    }
+    if (lump.length > fileSize - lump.offset) {
+      errors.push(
+        `lump ${lump.index} runs past end of file (${lump.offset}+${lump.length} > ${fileSize})`,
+      );
+      continue;
+    }
+    if (lump.length === 0) continue;
+    if (lump.offset < HEADER_BYTES) {
+      errors.push(
+        `lump ${lump.index} starts at ${lump.offset}, inside the ${HEADER_BYTES}-byte header`,
+      );
+      continue;
+    }
+    occupied.push({ lump, end: lump.offset + lump.length });
+  }
+
+  occupied.sort((a, b) => a.lump.offset - b.lump.offset);
+  for (let i = 1; i < occupied.length; i++) {
+    const previous = occupied[i - 1]!;
+    const current = occupied[i]!;
+    if (current.lump.offset < previous.end) {
+      errors.push(
+        `lumps ${previous.lump.index} and ${current.lump.index} overlap ` +
+          `(${previous.lump.offset}-${previous.end}, ${current.lump.offset}-${current.end})`,
+      );
+    }
+  }
+
+  const entities = lumps[0];
+  if (!entities || entities.length === 0) {
+    errors.push("ENTITIES lump is empty");
+  }
+
+  const models = lumps[14];
+  if (models && models.length > 0 && models.length % 48 !== 0) {
+    errors.push(`MODELS lump is ${models.length} bytes, not a multiple of 48`);
+  }
+
+  return errors;
+}
+
+function describeCandidate(layout: BspDescriptorLayout, errors: readonly string[]): string {
+  return errors.length === 0 ? `${layout}: valid` : `${layout}: ${errors.join("; ")}`;
 }
 
 /**
@@ -173,37 +283,43 @@ export function readHeader(path: string): BspHeader {
     throw new BspFormatError(`${path}: unsupported BSP version ${version} (expected 19-21)`);
   }
 
-  const lumps: BspLump[] = [];
-  for (let i = 0; i < LUMP_COUNT; i++) {
-    const at = 8 + i * 16;
-    const offset = view.getInt32(at, true);
-    const length = view.getInt32(at + 4, true);
-    const fourCC = view.getInt32(at + 12, true);
+  const candidates = (["source", "l4d2"] as const).map((layout) => {
+    const lumps = decodeLumps(view, layout);
+    return { layout, lumps, errors: validateLumps(path, size, lumps) };
+  });
+  const valid = candidates.filter((candidate) => candidate.errors.length === 0);
+  if (valid.length === 0) {
+    throw new BspFormatError(
+      `${path}: no valid BSP lump descriptor layout; ` +
+        candidates.map((candidate) => describeCandidate(candidate.layout, candidate.errors)).join(" | "),
+    );
+  }
+  if (valid.length > 1) {
+    throw new BspFormatError(
+      `${path}: ambiguous BSP lump descriptor layout; ` +
+        valid.map((candidate) => candidate.layout).join(" and ") +
+        " both pass structural validation",
+    );
+  }
 
+  const selected = valid[0]!;
+  const lumps = selected.lumps.map((lump) => {
     // Four bytes per non-empty lump. A compressed lump starts with the ASCII magic
     // "LZMA", and its fourCC carries the uncompressed size instead of a codec tag.
     const compressed =
-      length >= 4 &&
-      offset > 0 &&
-      offset + 4 <= size &&
-      readAt(path, offset, 4).toString("ascii") === LZMA_MAGIC;
-
-    lumps.push({
-      index: i,
-      name: LUMP_NAMES[i],
-      offset,
-      length,
-      version: view.getInt32(at + 8, true),
-      fourCC,
+      lump.length >= 4 && readAt(path, lump.offset, 4).toString("ascii") === LZMA_MAGIC;
+    return {
+      ...lump,
       compressed,
-      declaredUncompressedBytes: compressed ? fourCC : null,
-    });
-  }
+      declaredUncompressedBytes: compressed ? lump.fourCC : null,
+    };
+  });
 
   return {
     path,
     ident,
     version,
+    layout: selected.layout,
     mapRevision: view.getInt32(MAP_REVISION_OFFSET, true),
     fileSize: size,
     lumps,
@@ -219,6 +335,19 @@ export function requireLump(header: BspHeader, index: number): BspLump {
     throw new BspFormatError(
       `${header.path}: lump ${index} runs past end of file ` +
         `(${lump.offset}+${lump.length} > ${header.fileSize})`,
+    );
+  }
+  return lump;
+}
+
+/** Returns a lump whose body can be read as uncompressed records or text. */
+export function requireUncompressedLump(header: BspHeader, index: number): BspLump {
+  const lump = requireLump(header, index);
+  if (lump.compressed) {
+    throw new BspFormatError(
+      `${header.path}: lump ${index} (${lump.name ?? index}) is individually LZMA-compressed; ` +
+        `refusing rather than decoding compressed bytes as records. It declares ` +
+        `${lump.declaredUncompressedBytes} uncompressed bytes, not verified here.`,
     );
   }
   return lump;
