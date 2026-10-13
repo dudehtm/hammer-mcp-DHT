@@ -11,9 +11,10 @@ Its BSP was recognized as version 21 with the L4D2 descriptor layout, and the
 VMF passed the installed L4D2 FGD and I/O preflight. This checkpoint covers files
 and compilers; it does not certify the Hammer++ compiler chain or runtime gameplay.
 
-The [functional audit plan](plans/2026-10-13-l4d2-audit-plan.md) will extend this
-evidence with a map created through MCP calls, negative controls, visual review
-and explicit coverage of all registered tools. Full audit execution is pending.
+The [functional audit report](audits/2026-10-13-l4d2-functional-audit.md) extends
+this evidence with a map created through MCP calls, negative controls, visual review
+and explicit coverage of all 78 registered tools. It is an offline verification; it
+does not certify Hammer GUI workflows, NAV generation, bots or runtime gameplay.
 
 ## Gate A
 

@@ -482,11 +482,13 @@ from and whether a file was read; `health` reports it. See
 
 ## Tools
 
-The next [L4D2 functional audit](docs/plans/2026-10-13-l4d2-audit-plan.md) follows
-a small map from creation to compilation and packaging, with a coverage matrix for
-all 78 registered tools. It is a plan; the complete audit has not run yet.
+The [L4D2 functional audit](docs/audits/2026-10-13-l4d2-functional-audit.md)
+followed a small map from creation through compilation, BSP inspection and packaging,
+with an MCP call for each of the 78 registered tools. The offline path passed after
+fixing the `run_pack` command; Hammer/game runtime remains unverified. The plan and its
+per-tool statuses are in [the audit plan](docs/plans/2026-10-13-l4d2-audit-plan.md).
 `run_vtf_convert` has an implementation under `src/tools/vtf.ts` but is not registered
-in the MCP. Registration and external converter prerequisites are audit items.
+in the MCP, so it was outside the 78-tool inventory.
 
 `read_*` observes, `run_*` executes, `verb_noun` mutates. Tools that write or execute are
 **guarded**: they need `confirm: true`, or their name in `toolAllowlist`.

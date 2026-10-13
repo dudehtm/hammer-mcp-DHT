@@ -2,10 +2,13 @@
 
 Fecha: **2026-10-13**. Rama: `feat/l4d2-workflow-integration`.
 
-**Estado: plan preparado; ejecución de la auditoría completa pendiente.**
-Las etapas 4 y 5 ya tienen verificación de implementación: build, typecheck,
-1027 pruebas aprobadas y 83 omitidas. Eso no equivale a haber usado todas las
-herramientas desde un cliente MCP.
+## Ejecución de la auditoría (2026-10-13)
+
+**Estado: completada.** El cliente MCP invocó las 78 herramientas registradas; 70 pasaron, 4 se probaron a nivel de formato sin afirmar runtime, 3 quedaron bloqueadas por binarios opcionales ausentes y 1 no aplica al despliegue L4D2. No hubo fallos pendientes al cierre.
+
+La auditoría encontró y corrigió un defecto concreto en `run_pack`: la llamada a `bspzip` enviaba `-game` antes de `-addlist` y reutilizaba el BSP de entrada como salida. El comando ahora usa el orden que exige el binario instalado, genera un BSP temporal, verifica el pakfile y reemplaza la copia solo si todas las entradas aparecen. Build, typecheck y suite volvieron a pasar después del cambio.
+
+Informe detallado: [auditoría funcional](../audits/2026-10-13-l4d2-functional-audit.md). Cobertura reproducible local: `.hammer-mcp/audits/2026-10-13-l4d2/coverage.json` (ignorado por Git).
 
 ## Objetivo y alcance
 
@@ -168,103 +171,103 @@ eso no se cuenta como éxito en L4D2.
 
 | Herramienta | Escenario | Confirm | Requisitos iniciales | Estado de ejecución |
 |---|---|---|---|---|
-| `health` | S1 | No | Fixture local | Pendiente |
-| `read_source_games` | S1 | No | Fixture local | Pendiente |
-| `read_fgd_class` | S2 | No | Contenido/FGD + sidecar | Pendiente |
-| `read_game_content` | S2 | No | Contenido/FGD + sidecar | Pendiente |
-| `read_model_info` | S2 | No | Contenido/FGD + sidecar | Pendiente |
-| `write_vmf` | S3 | Sí | Fixture local | Pendiente |
-| `write_vmf_solid` | S3 | Sí | Fixture local | Pendiente |
-| `write_vmf_fitting` | S3 | Sí | Fixture local | Pendiente |
-| `edit_vmf` | S3 | Sí | Fixture local | Pendiente |
-| `read_vmf` | S3 | No | Fixture local | Pendiente |
-| `read_vmf_lint` | S3 | No | Fixture local | Pendiente |
-| `read_vmf_solids` | S3 | No | Fixture local | Pendiente |
-| `read_entity_report` | S3 | No | Fixture local | Pendiente |
-| `validate_io` | S3 | No | Fixture local | Pendiente |
-| `check_l4d2_map` | S3 | No | Fixture local | Pendiente |
-| `set_map_properties` | S3 | Sí | Fixture local | Pendiente |
-| `read_displacements` | S4 | No | Fixture local | Pendiente |
-| `write_displacement` | S4 | Sí | Fixture local | Pendiente |
-| `sew_displacements` | S4 | Sí | Fixture local | Pendiente |
-| `sculpt_displacement` | S4 | Sí | Fixture local | Pendiente |
-| `paint_displacement` | S4 | Sí | Fixture local | Pendiente |
-| `transform_solids` | S4 | Sí | Fixture local | Pendiente |
-| `delete_solids` | S4 | Sí | Fixture local | Pendiente |
-| `clip_solids` | S4 | Sí | Fixture local | Pendiente |
-| `move_vertices` | S4 | Sí | Fixture local | Pendiente |
-| `hollow_solids` | S4 | Sí | Fixture local | Pendiente |
-| `set_face_material` | S4 | Sí | Fixture local | Pendiente |
-| `align_faces` | S4 | Sí | Fixture local | Pendiente |
-| `set_smoothing_groups` | S4 | Sí | Fixture local | Pendiente |
-| `read_map_organisation` | S4 | No | Fixture local | Pendiente |
-| `set_visgroup` | S4 | Sí | Fixture local | Pendiente |
-| `group_solids` | S4 | Sí | Fixture local | Pendiente |
-| `set_cordon` | S4 | Sí | Fixture local | Pendiente |
-| `write_hint_brush` | S4 | Sí | Fixture local | Pendiente |
-| `set_solid_class` | S4 | Sí | Fixture local | Pendiente |
-| `set_lightmap_scale` | S4 | Sí | Fixture local | Pendiente |
-| `write_portal` | S4 | Sí | Fixture local | Pendiente |
-| `read_vmf_trace` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_visibility` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_nearest_surface` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_leak` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_rooms` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_surfaces` | S5 | No | Fixture local | Pendiente |
-| `measure_vmf_clearance` | S5 | No | Fixture local | Pendiente |
-| `measure_vmf_approach` | S5 | No | Fixture local | Pendiente |
-| `read_vmf_sightlines` | S5 | No | Fixture local | Pendiente |
-| `check_vmf_rules` | S5 | No | Fixture local | Pendiente |
-| `render_vmf_view` | S5 | No | Fixture local | Pendiente |
-| `render_vmf_tour` | S5 | No | Fixture local | Pendiente |
-| `render_vmf_plan` | S5 | No | Fixture local | Pendiente |
-| `run_compile` | S6 | Sí | BSP/recursos L4D2 | Pendiente |
-| `read_compile_log` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_leak` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_bsp_info` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_bsp_entities` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_map_extents` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_map_geometry` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_prop_survey` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_sightlines` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_brush_volumes` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_materials` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_lightmap_budget` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_visleaf_stats` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `read_map_report` | S6 | No | BSP/recursos L4D2 | Pendiente |
-| `check_l4d2_mission` | S7 | No | BSP/recursos L4D2 | Pendiente |
-| `read_map_dependencies` | S7 | No | BSP/recursos L4D2 | Pendiente |
-| `read_pakfile` | S7 | No | BSP/recursos L4D2 | Pendiente |
-| `run_pack` | S7 | Sí | BSP/recursos L4D2 | Pendiente |
-| `run_pakfile_extract` | S7 | Sí | BSP/recursos L4D2 | Pendiente |
-| `read_nav` | S7 | No | NAV existente; no generación offline | Pendiente |
-| `read_gma` | S8 | No | Fixture de compatibilidad / binario opcional | Pendiente |
-| `run_gma_extract` | S8 | Sí | Fixture de compatibilidad / binario opcional | Pendiente |
-| `read_lump_patch` | S8 | No | Fixture de compatibilidad / binario opcional | Pendiente |
-| `write_lump_patch` | S8 | Sí | Fixture de compatibilidad / binario opcional | Pendiente |
-| `read_lump_patch_status` | S8 | No | Fixture de compatibilidad / binario opcional | Pendiente |
-| `run_bsp_rename` | S8 | Sí | Fixture de compatibilidad / binario opcional | Pendiente |
-| `run_tga2skybox` | S8 | Sí | Fixture de compatibilidad / binario opcional | Pendiente |
-| `run_cubemap2hdr` | S8 | Sí | Fixture de compatibilidad / binario opcional | Pendiente |
+| `health` | S1 | No | Fixture local | passed |
+| `read_source_games` | S1 | No | Fixture local | passed |
+| `read_fgd_class` | S2 | No | Contenido/FGD + sidecar | passed |
+| `read_game_content` | S2 | No | Contenido/FGD + sidecar | passed |
+| `read_model_info` | S2 | No | Contenido/FGD + sidecar | passed |
+| `write_vmf` | S3 | Sí | Fixture local | passed |
+| `write_vmf_solid` | S3 | Sí | Fixture local | passed |
+| `write_vmf_fitting` | S3 | Sí | Fixture local | passed |
+| `edit_vmf` | S3 | Sí | Fixture local | passed |
+| `read_vmf` | S3 | No | Fixture local | passed |
+| `read_vmf_lint` | S3 | No | Fixture local | passed |
+| `read_vmf_solids` | S3 | No | Fixture local | passed |
+| `read_entity_report` | S3 | No | Fixture local | passed |
+| `validate_io` | S3 | No | Fixture local | passed |
+| `check_l4d2_map` | S3 | No | Fixture local | passed |
+| `set_map_properties` | S3 | Sí | Fixture local | passed |
+| `read_displacements` | S4 | No | Fixture local | passed |
+| `write_displacement` | S4 | Sí | Fixture local | passed |
+| `sew_displacements` | S4 | Sí | Fixture local | passed |
+| `sculpt_displacement` | S4 | Sí | Fixture local | passed |
+| `paint_displacement` | S4 | Sí | Fixture local | passed |
+| `transform_solids` | S4 | Sí | Fixture local | passed |
+| `delete_solids` | S4 | Sí | Fixture local | passed |
+| `clip_solids` | S4 | Sí | Fixture local | passed |
+| `move_vertices` | S4 | Sí | Fixture local | passed |
+| `hollow_solids` | S4 | Sí | Fixture local | passed |
+| `set_face_material` | S4 | Sí | Fixture local | passed |
+| `align_faces` | S4 | Sí | Fixture local | passed |
+| `set_smoothing_groups` | S4 | Sí | Fixture local | passed |
+| `read_map_organisation` | S4 | No | Fixture local | passed |
+| `set_visgroup` | S4 | Sí | Fixture local | passed |
+| `group_solids` | S4 | Sí | Fixture local | passed |
+| `set_cordon` | S4 | Sí | Fixture local | passed |
+| `write_hint_brush` | S4 | Sí | Fixture local | passed |
+| `set_solid_class` | S4 | Sí | Fixture local | passed |
+| `set_lightmap_scale` | S4 | Sí | Fixture local | passed |
+| `write_portal` | S4 | Sí | Fixture local | passed |
+| `read_vmf_trace` | S5 | No | Fixture local | passed |
+| `read_vmf_visibility` | S5 | No | Fixture local | passed |
+| `read_vmf_nearest_surface` | S5 | No | Fixture local | passed |
+| `read_vmf_leak` | S5 | No | Fixture local | passed |
+| `read_vmf_rooms` | S5 | No | Fixture local | passed |
+| `read_vmf_surfaces` | S5 | No | Fixture local | passed |
+| `measure_vmf_clearance` | S5 | No | Fixture local | passed |
+| `measure_vmf_approach` | S5 | No | Fixture local | passed |
+| `read_vmf_sightlines` | S5 | No | Fixture local | passed |
+| `check_vmf_rules` | S5 | No | Fixture local | passed |
+| `render_vmf_view` | S5 | No | Fixture local | passed |
+| `render_vmf_tour` | S5 | No | Fixture local | passed |
+| `render_vmf_plan` | S5 | No | Fixture local | passed |
+| `run_compile` | S6 | Sí | BSP/recursos L4D2 | passed |
+| `read_compile_log` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_leak` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_bsp_info` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_bsp_entities` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_map_extents` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_map_geometry` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_prop_survey` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_sightlines` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_brush_volumes` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_materials` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_lightmap_budget` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_visleaf_stats` | S6 | No | BSP/recursos L4D2 | passed |
+| `read_map_report` | S6 | No | BSP/recursos L4D2 | passed |
+| `check_l4d2_mission` | S7 | No | BSP/recursos L4D2 | passed |
+| `read_map_dependencies` | S7 | No | BSP/recursos L4D2 | passed |
+| `read_pakfile` | S7 | No | BSP/recursos L4D2 | passed |
+| `run_pack` | S7 | Sí | BSP/recursos L4D2 | passed |
+| `run_pakfile_extract` | S7 | Sí | BSP/recursos L4D2 | passed |
+| `read_nav` | S7 | No | NAV existente; no generación offline | passed |
+| `read_gma` | S8 | No | Fixture de compatibilidad / binario opcional | format_only_runtime_unverified |
+| `run_gma_extract` | S8 | Sí | Fixture de compatibilidad / binario opcional | format_only_runtime_unverified |
+| `read_lump_patch` | S8 | No | Fixture de compatibilidad / binario opcional | format_only_runtime_unverified |
+| `write_lump_patch` | S8 | Sí | Fixture de compatibilidad / binario opcional | format_only_runtime_unverified |
+| `read_lump_patch_status` | S8 | No | Fixture de compatibilidad / binario opcional | not_applicable_to_l4d2 |
+| `run_bsp_rename` | S8 | Sí | Fixture de compatibilidad / binario opcional | blocked_missing_prerequisite |
+| `run_tga2skybox` | S8 | Sí | Fixture de compatibilidad / binario opcional | blocked_missing_prerequisite |
+| `run_cubemap2hdr` | S8 | Sí | Fixture de compatibilidad / binario opcional | blocked_missing_prerequisite |
 
-## Hallazgos preliminares para revisar
+## Hallazgos y resolución
 
 1. `run_vtf_convert` tiene implementación y suites, pero `vtfTools` no se agrega
    a `allTools`. Por eso no es accesible por MCP ni pertenece a las 78 filas.
-   Se corrige su presentación como herramienta disponible en la documentación.
-   En la ejecución se decidirá si registrar la herramienta, actualizar el conteo
-   y probar el contrato; VTFCmd/DevIL no están disponibles en la instalación
-   previamente inspeccionada.
+   README y paridad ahora lo identifican como no registrado. Su registro queda
+   fuera de esta auditoría; VTFCmd/DevIL faltan y no se probó una conversión positiva.
 2. Hay escritores históricos, como `write_lump_patch`, que emplean escritura
    directa con guards, en vez de pasar por el helper central. Revisar alcance,
-   payload binario y pruebas de rutas antes de cambiar esa implementación.
-   La observación por sí sola no demuestra que se pueda escapar del guard.
+   payload binario y pruebas de rutas antes de cambiar esa implementación. La
+   auditoría hizo round-trip de un LMP y confirmó su ruta dentro de `writeRoots`;
+   no desplegó el patch ni comprobó su carga en ningún motor.
 3. Los gates de Wine/Hammer++ en GMod son históricos y específicos de esa rama.
    No prueban disponibilidad de compiladores Hammer++ ni juego en vivo de L4D2.
-4. Corregir las descripciones que hayan quedado atrás frente al registro/schemas,
-   incluido el número de confirmaciones del cliente y la configuración de fog.
+   Este run usó compiladores stock y dejó explícito que el runtime sigue pendiente.
+4. README, paridad y gates enlazan el informe y ya no describen la auditoría como
+   pendiente. La matriz registra los resultados de las 78 herramientas.
 
-## Resultados y criterio de cierre
+## Resultados y cierre
 
 Registrar por herramienta y por caso: input, perfil, requisito, resultado positivo
 o control negativo, duración, oráculo, evidencia y estado. Estados permitidos:
@@ -273,21 +276,18 @@ o control negativo, duración, oráculo, evidencia y estado. Estados permitidos:
 Un diagnóstico de binario ausente puede pasar su control negativo mientras que
 el caso positivo queda bloqueado. Las dos cosas se muestran por separado.
 
-Entregar un informe en `docs/audits/<fecha>-l4d2-functional-audit.md` y un
-`coverage.json` local. Guardar logs de compilación, audit JSONL, imágenes y hashes
-de originales/variantes junto a los artefactos locales. No versionar BSP/FGD/assets
-de Valve, índices ni configuración de esta máquina.
-
-El cierre exige:
+Informe entregado en `docs/audits/2026-10-13-l4d2-functional-audit.md` y
+`coverage.json` local. Logs, imágenes, hashes y variantes permanecen bajo el state
+dir ignorado; no se versionaron BSP, FGD, assets de Valve, índices ni configuración.
 
 - 78 filas con un resultado explícito, sin omisiones silenciosas.
 - Camino principal VMF → preflight → compilación stock → BSP → dependencias verificado.
 - Índice y lotes con controles positivos/negativos demostrados.
 - Revisiones de imágenes documentadas.
-- Fallos priorizados por bloqueo del flujo L4D2 y correcciones acotadas.
-- Build, typecheck y suite obligatoria después de cualquier corrección; separar
-  aprobadas, fallidas y omitidas. Cada prueba nueva debe demostrar que puede fallar,
-  según CONTRIBUTING.md.
+- Defecto bloqueante de `run_pack` corregido y probado con entrada empaquetada,
+  extracción, hash y control que conserva el BSP cuando la fuente falta.
+- `build` y `typecheck` pasaron; suite: 1,030 aprobadas, 83 omitidas, 0 fallidas.
+  Las pruebas añadidas fallan al invertir el orden de argumentos o retirar el guard.
 - Un apartado de pendientes para runtime, Hammer/Hammer++ GUI, NAV/bots, assets
   opcionales y perfiles de compatibilidad, sin presentarlos como verificados.
 

@@ -20,8 +20,10 @@ Four things are true of every row below, and worth saying once rather than in ea
 
 Last checked against the tool list on 13/10/2026: **78 tools**.
 
-The [functional audit plan](plans/2026-10-13-l4d2-audit-plan.md) maps each registered
-tool to a scenario and its prerequisites. The complete audit is pending execution.
+The [functional audit report](audits/2026-10-13-l4d2-functional-audit.md) records
+offline execution and per-tool outcomes; the [plan](plans/2026-10-13-l4d2-audit-plan.md)
+keeps the scenario and prerequisite matrix. It covers registered MCP tools, not Hammer
+or L4D2 runtime behavior.
 
 ## The file itself
 
@@ -178,7 +180,7 @@ map and looking, or by not happening at all.
 | `read_pakfile` | nothing |
 | `run_pakfile_extract` | nothing: a compiled map's packed content could be listed and never opened |
 | `run_cubemap2hdr` | nothing offline. The engine builds cubemaps in whichever mode it is running |
-| VTF conversion | Implementation exists as `run_vtf_convert`, but is not registered in MCP; pending audit |
+| VTF conversion | Implementation exists as `run_vtf_convert`, but is not registered in MCP; outside the 78-tool audit |
 | `read_sightlines` | the eye, standing in the map |
 | `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |

@@ -51,6 +51,16 @@ export interface GuardedWrite {
   backupPath: string | null;
 }
 
+/** Atomically replaces a guarded file with a sibling file produced by an external tool. */
+export function replaceGuardedFile(source: string, destination: string, config: Config): void {
+  const checkedSource = assertWritable(source, config);
+  const checkedDestination = assertWritable(destination, config);
+  if (checkedSource === checkedDestination) {
+    throw new Error(`refusing to replace ${checkedDestination} with itself`);
+  }
+  renameSync(checkedSource, checkedDestination);
+}
+
 export function writeGuarded(
   path: string,
   text: string,

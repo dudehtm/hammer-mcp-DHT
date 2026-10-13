@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, join } from "node:path";
 import { clip } from "@projectsociety/mcp-core";
 import { z } from "zod";
@@ -15,7 +16,7 @@ import { readEntityLump } from "../bsp/entities.js";
 import { checkNavFreshness } from "../bsp/nav.js";
 import { parseEntityText } from "../bsp/entities.js";
 import { assertWritable } from "../fs/guard.js";
-import { writeGuarded } from "../fs/write.js";
+import { replaceGuardedFile, writeGuarded } from "../fs/write.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
 import { gameBlock, gameFor } from "../games/resolve.js";
@@ -27,6 +28,16 @@ const FINDING = z.object({
   message: z.string(),
   line: z.string(),
 });
+
+/** Argument order required by Valve's bspzip: the operation first and -game last. */
+export function buildBspzipAddListArgs(
+  bsp: string,
+  list: string,
+  output: string,
+  gameDir: string,
+): string[] {
+  return ["-addlist", bsp, list, output, "-game", gameDir];
+}
 
 /**
  * Hammer++ by default: it is the better compiler, and this project compiles with it.
@@ -482,8 +493,8 @@ export const runPack = defineTool({
     "from a VPK. Those are the ones that ship broken -- they work at home because they " +
     "are on that disk. VPK content is never packed: every player who owns the game has it. " +
     "The derived list is returned, so what was packed is visible rather than inferred. " +
-    "Verifies afterwards by re-reading the pakfile: bspzip reports success whether or not " +
-    "anything was added.",
+    "Writes to a guarded sibling file, verifies the new pakfile by reading it back, then " +
+    "atomically replaces the target. A failure leaves the original untouched.",
   realm: "local",
   guarded: true,
   meta: { "anthropic/requiresUserInteraction": true },
@@ -606,10 +617,10 @@ export const runPack = defineTool({
       );
     }
 
-    const countPak = async (): Promise<number> => {
+    const countPak = async (path = bsp): Promise<number> => {
       const r = await callSidecar<{ fileCount: number }>(
         "pakfile",
-        { path: bsp, limit: 1 },
+        { path, limit: 1 },
         ctx.config,
         300_000,
       );
@@ -631,46 +642,64 @@ export const runPack = defineTool({
 
     const packChain = chooseToolchain(ctx.config, args.toolchain, ["bspzip"], packProfile);
 
-    const run = await runCompiler(
+    const temporaryBsp = assertWritable(
+      join(dirname(bsp), `.${basename(bsp, extname(bsp))}.${randomUUID()}.pack.bsp`),
       ctx.config,
-      compilerExe("bspzip", packChain.chain),
-      [
-        "-game",
-        toCompilerPath(packProfile.gameDir ?? ctx.config.gmodGameDir, ctx.config.backend),
-        "-addlist",
-        toCompilerPath(bsp, ctx.config.backend),
-        toCompilerPath(listPath, ctx.config.backend),
-        toCompilerPath(bsp, ctx.config.backend),
-      ],
-      600_000,
-      packChain.chain,
-      packProfile,
     );
+    try {
+      // bspzip expects the operation first and the optional -game pair last. It also
+      // requires a distinct output path; passing the input as output fails without
+      // changing the map.
+      const run = await runCompiler(
+        ctx.config,
+        compilerExe("bspzip", packChain.chain),
+        buildBspzipAddListArgs(
+          toCompilerPath(bsp, ctx.config.backend),
+          toCompilerPath(listPath, ctx.config.backend),
+          toCompilerPath(temporaryBsp, ctx.config.backend),
+          toCompilerPath(packProfile.gameDir ?? ctx.config.gmodGameDir, ctx.config.backend),
+        ),
+        600_000,
+        packChain.chain,
+        packProfile,
+      );
 
-    const filesAfter = await countPak();
-    const bytesAfter = statSync(bsp).size;
+      let filesAfter = filesBefore;
+      let bytesAfter = bytesBefore;
+      let verifiedFiles = filesBefore;
+      if (existsSync(temporaryBsp)) verifiedFiles = await countPak(temporaryBsp);
 
-    return {
-      bsp,
-      toolchain: packChain.chain,
-      toolchainRequested: packChain.requested,
-      toolchainNote: packChain.note,
-      game: gameBlock(packProfile, packFrom),
-      requested: files.length,
-      derived,
-      ...(autoNote !== undefined ? { autoNote } : {}),
-      filesBefore,
-      filesAfter,
-      added: filesAfter - filesBefore,
-      bytesBefore,
-      bytesAfter,
-      exitCode: run.code,
-      // The exit code is not the oracle: what matters is that the pakfile grew by what
-      // was asked for.
-      ok: filesAfter - filesBefore === files.length,
-      missingSources,
-      stdoutTail: clip(run.stdout.split(/\r?\n/).slice(-20).join("\n"), 2000),
-    };
+      // bspzip's exit code alone is not enough. Keep the original unless the process
+      // succeeded and the output contains every requested new pakfile entry.
+      if (run.code === 0 && verifiedFiles - filesBefore === files.length) {
+        replaceGuardedFile(temporaryBsp, bsp, ctx.config);
+        filesAfter = await countPak();
+        bytesAfter = statSync(bsp).size;
+      }
+
+      const output = [run.stdout, run.stderr].filter(Boolean).join("\n");
+      return {
+        bsp,
+        toolchain: packChain.chain,
+        toolchainRequested: packChain.requested,
+        toolchainNote: packChain.note,
+        game: gameBlock(packProfile, packFrom),
+        requested: files.length,
+        derived,
+        ...(autoNote !== undefined ? { autoNote } : {}),
+        filesBefore,
+        filesAfter,
+        added: filesAfter - filesBefore,
+        bytesBefore,
+        bytesAfter,
+        exitCode: run.code,
+        ok: run.code === 0 && filesAfter - filesBefore === files.length,
+        missingSources,
+        stdoutTail: clip(output.split(/\r?\n/).slice(-20).join("\n"), 2000),
+      };
+    } finally {
+      rmSync(temporaryBsp, { force: true });
+    }
   },
 });
 

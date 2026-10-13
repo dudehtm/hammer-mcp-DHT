@@ -18,7 +18,7 @@ import {
 import type { MapEntity } from "../src/entity/model.js";
 import { resolveProfiles } from "../src/games/profile.js";
 import type { ToolContext } from "../src/mcp/registry.js";
-import { readLeak, runCompile } from "../src/tools/compile.js";
+import { buildBspzipAddListArgs, readLeak, runCompile } from "../src/tools/compile.js";
 import { FIXTURES, config, ctx as sharedCtx, has, paths } from "./support/env.js";
 
 const ctx = sharedCtx as unknown as ToolContext;
@@ -40,6 +40,16 @@ describe("Windows path conversion", () => {
   it("leaves an absolute path unchanged for the native backend", () => {
     const path = "C:\\maps\\bol_test_base.vmf";
     expect(toCompilerPath(path, "native")).toBe(path);
+  });
+});
+
+describe("bspzip add-list command", () => {
+  it("puts the operation first, uses a distinct output, and leaves -game last", () => {
+    const input = "C:\\maps\\input.bsp";
+    const output = "C:\\maps\\output.tmp.bsp";
+    expect(buildBspzipAddListArgs(input, "C:\\state\\files.txt", output, "C:\\game"))
+      .toEqual(["-addlist", input, "C:\\state\\files.txt", output, "-game", "C:\\game"]);
+    expect(output).not.toBe(input);
   });
 });
 
