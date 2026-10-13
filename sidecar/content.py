@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import os
+from time import perf_counter
 from typing import Any, Iterator
 
 # A search that returns everything is not a search, and serialising 40 000 names through
@@ -176,6 +178,7 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
     offset = max(0, int(req.get("offset", 0)))
     limit = max(1, min(int(req.get("limit", DEFAULT_LIMIT)), MAX_LIMIT))
     want_details = bool(req.get("details", False))
+    timings = {"mountMs": 0.0, "indexMs": 0.0, "walkMs": 0.0, "filterMs": 0.0, "detailsMs": 0.0}
 
     if not pattern:
         # Not a top-level `error`: callSidecar reads any truthy top-level `error` as the
@@ -191,11 +194,16 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
             "offset": offset,
             "limit": limit,
             "total": 0,
+            "shown": 0,
+            "truncated": False,
+            "timings": timings,
             "results": [],
             "refused": "a search needs a pattern; an empty one would return the whole game",
         }
 
+    started = perf_counter()
     fsys, mount_error = _mount(game_dir)
+    timings["mountMs"] = (perf_counter() - started) * 1000
     if fsys is None:
         return {
             "gameDir": game_dir,
@@ -206,16 +214,45 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
             "offset": offset,
             "limit": limit,
             "total": 0,
+            "shown": 0,
+            "truncated": False,
+            "timings": timings,
             "results": [],
             "note": "nothing was searched, so an empty result here says nothing about the game",
         }
 
+    from content_index import VERSION, read_index, signature
+
+    started = perf_counter()
+    index_path = req.get("indexPath")
+    fingerprint = signature(fsys, game_dir) if index_path else None
+    identity = {"version": VERSION, "gameDir": os.path.realpath(game_dir),
+                "profile": req.get("profile"), "signature": fingerprint}
+    paths = read_index(index_path, identity) if fingerprint and not req.get("rebuildIndex") else None
+    cache = {"status": "hit" if paths is not None else "rebuilt" if fingerprint else "disabled",
+             "reason": None if fingerprint else "no writable index path or unsupported mount metadata"}
+    timings["indexMs"] = (perf_counter() - started) * 1000
+    index_update = None
+    if paths is None:
+        started = perf_counter()
+        paths = sorted({path for path in _walk(fsys)
+                        if (path.lower().startswith("materials/") and path.lower().endswith(".vmt")) or
+                           (path.lower().startswith("models/") and path.lower().endswith(".mdl"))})
+        timings["walkMs"] = (perf_counter() - started) * 1000
+        # Avoid persisting an index when metadata changed during this scan.
+        if fingerprint:
+            started = perf_counter()
+            if signature(fsys, game_dir) == fingerprint:
+                index_update = {**identity, "paths": paths}
+            timings["indexMs"] += (perf_counter() - started) * 1000
+
+    started = perf_counter()
     prefix, suffix = (
         ("materials/", ".vmt") if kind == "material" else ("models/", ".mdl")
     )
     match = _matcher(pattern)
     hits: list[str] = []
-    for path in _walk(fsys):
+    for path in paths:
         low = path.lower()
         if not low.startswith(prefix) or not low.endswith(suffix):
             continue
@@ -225,7 +262,9 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
     hits.sort()
     total = len(hits)
     shown = hits[offset : offset + limit]
+    timings["filterMs"] = (perf_counter() - started) * 1000
 
+    started = perf_counter()
     results: list[dict[str, Any]] = []
     for rel in shown:
         row: dict[str, Any] = {"path": rel}
@@ -234,6 +273,7 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
             if want_details:
                 row.update(_material_details(fsys, rel))
         results.append(row)
+    timings["detailsMs"] = (perf_counter() - started) * 1000
 
     return {
         "gameDir": game_dir,
@@ -247,9 +287,12 @@ def search_content(req: dict[str, Any]) -> dict[str, Any]:
         "shown": len(results),
         "truncated": offset + len(results) < total,
         "results": results,
+        "cache": cache,
+        "timings": timings,
+        **({"_indexUpdate": index_update} if index_update is not None else {}),
         "note": (
-            "names only unless details was asked for: a Garry's Mod install holds tens of "
-            "thousands of VMTs and parsing them all to answer one search would cost seconds"
+            "names only unless details was requested; pages are sorted by path. "
+            "The index stores names only; material details are read live."
         ),
     }
 

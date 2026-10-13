@@ -18,7 +18,10 @@ Four things are true of every row below, and worth saying once rather than in ea
   says which of these have been through a compiler, an engine, or an outside implementation.
   This one is about reach.
 
-Last checked against the tool list on 12/10/2026: **78 tools**.
+Last checked against the tool list on 13/10/2026: **78 tools**.
+
+The [functional audit plan](plans/2026-10-13-l4d2-audit-plan.md) maps each registered
+tool to a scenario and its prerequisites. The complete audit is pending execution.
 
 ## The file itself
 
@@ -62,7 +65,7 @@ getting `ENOENT` on the first call.
 | Hammer | Here | Notes |
 |---|---|---|
 | Apply current texture | `set_face_material` | Selects by solid, material, facing or area |
-| Browse textures | `read_game_content` | Searches the game's own VPKs. Returns names in the form a `.vmf` stores |
+| Browse textures | `read_game_content` | Stable pages, disposable index under stateDir, live details and measured timings. Returns names in the form a `.vmf` stores |
 | Align to World | `align_faces` (`world`) | vbsp's own base-axis table |
 | Align to Face | `align_faces` (`face`) | Axes kept perpendicular by orthogonalisation, not by a cross product — vbsp's table is not consistently handed |
 | Fit | `align_faces` (`fit`) | Assumes a 512-texel texture and says so |
@@ -175,8 +178,7 @@ map and looking, or by not happening at all.
 | `read_pakfile` | nothing |
 | `run_pakfile_extract` | nothing: a compiled map's packed content could be listed and never opened |
 | `run_cubemap2hdr` | nothing offline. The engine builds cubemaps in whichever mode it is running |
-| `run_vtf_convert` | nothing: Hammer browses textures, it does not make them |
-Thirty-eight of the tools here answer questions Hammer never asked. They are not parity and
+| VTF conversion | Implementation exists as `run_vtf_convert`, but is not registered in MCP; pending audit |
 | `read_sightlines` | the eye, standing in the map |
 | `read_vmf_rooms` | nothing: Hammer has no idea what a room is |
 | `read_vmf_surfaces` | nothing: no readout says which faces are buried between brushes |

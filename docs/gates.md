@@ -3,6 +3,18 @@
 Before writing a tool that depends on something, this repository first proves the something works.
 Each gate below is dated, and one of them is still open and says so.
 
+## L4D2 native offline checkpoint
+
+On 12/10/2026, a local copy of `bol_test_box.vmf` completed the installed L4D2
+stock `vbsp`, `vvis` and `vrad` stages natively on Windows, each with exit code 0.
+Its BSP was recognized as version 21 with the L4D2 descriptor layout, and the
+VMF passed the installed L4D2 FGD and I/O preflight. This checkpoint covers files
+and compilers; it does not certify the Hammer++ compiler chain or runtime gameplay.
+
+The [functional audit plan](plans/2026-10-13-l4d2-audit-plan.md) will extend this
+evidence with a map created through MCP calls, negative controls, visual review
+and explicit coverage of all registered tools. Full audit execution is pending.
+
 ## Gate A
 
 **The compilers under Wine — passed 02/08/2026.**

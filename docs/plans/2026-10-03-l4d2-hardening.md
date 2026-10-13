@@ -2,6 +2,33 @@
 
 Fecha: **2026-10-03**.
 
+## Siguiente entrega: auditoria funcional
+
+El [plan de auditoria del 2026-10-13](2026-10-13-l4d2-audit-plan.md) cubre las
+78 herramientas registradas, los recursos locales y un recorrido de creacion,
+edicion, compilacion y empaquetado L4D2. La auditoria completa esta pendiente;
+las verificaciones de las etapas 4 y 5 se conservan como evidencia previa.
+La rama remota fue publicada con las etapas 1-3; ahora se publican las etapas
+4-5 y este plan. El funcionamiento dentro del juego continua pendiente.
+
+## Estado de etapas 4 y 5 al 2026-10-13
+
+- Etapa 4 integrada: paginacion consistente, tiempos por fase y audit log de busquedas.
+  El recorrido dominaba el coste, por lo que se agrego un indice de nombres bajo
+  `stateDir`, aislado por perfil/ruta real e invalidado con metadata de montaje,
+  gameinfo, VPK y directorios sueltos. Se escribe con guard y reemplazo atomico.
+  Los detalles se leen siempre en vivo; `rebuildIndex` permite reconstruirlo.
+- En la instalacion L4D2, una busqueda sin indice tomo 1330 ms y las repetidas con
+  indice 285-297 ms. No se reprodujo MaxListenersExceededWarning con 36 llamadas
+  concurrentes en grupos de 12; no se modificaron listeners.
+- Etapa 5 integrada usando `solids[]` y `ops[]`: validacion completa antes de una
+  escritura y un backup por lote, comprobacion del documento final y rechazo de
+  conflictos. Un benchmark creo 24 brushes y 12 entidades en dos escrituras, unos
+  15 ms en total. No hay evidencia que justifique agregar una herramienta de escena.
+- Build y typecheck pasan. Suite completa: 1027 pruebas aprobadas, 83 omitidas.
+  Las 14 nuevas pruebas se sabotearon individualmente, fallaron y se restauraron.
+- Evidencia y comandos reproducibles: [medicion de contenido y lotes](../measurements/2026-10-13-content-and-batches.md).
+
 ## Estado de integracion al 2026-10-12
 
 - Rama de trabajo: `feat/l4d2-workflow-integration`; conserva el diff local previo.

@@ -61,6 +61,9 @@ export const editVmf = defineTool({
     "touched stays byte-identical, so a one-entity change is a one-entity diff. Adds, " +
     "updates and removes entities, and adds or removes their outputs. Never reserialises " +
     "the file: comments, blank lines and hand-written indentation would be lost silently. " +
+    "Group entities and outputs in ops[]: the complete batch is validated before one " +
+    "write and one optional backup. Selectors refer to the original file, so an entity " +
+    "added in this batch must be targeted in a later call. Conflicting edits are refused. " +
     "Does not create brush geometry -- that is write_vmf_solid, which has the checks that " +
     "job needs. Run read_vmf_lint after editing.",
   realm: "map",
@@ -73,7 +76,7 @@ export const editVmf = defineTool({
   meta: { "anthropic/requiresUserInteraction": true },
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
-    ops: z.array(OP).min(1),
+    ops: z.array(OP).min(1).describe("One validated batch against the original VMF. Prefer this to one call per entity."),
     dryRun: DRY_RUN,
     backup: BACKUP,
     confirm: CONFIRM,
@@ -102,6 +105,7 @@ export const editVmf = defineTool({
     note: z.string(),
   },
   handler: (args, ctx) => {
+    const started = performance.now();
     const path = resolveVmfInput(args.path, ctx.config);
     if (!existsSync(path)) throw new Error(`${path} does not exist`);
 
@@ -121,6 +125,8 @@ export const editVmf = defineTool({
       data: {
         path,
         ops: args.ops.length,
+        operation: "edit_entities",
+        durationMs: performance.now() - started,
         written: shouldWrite,
         entitiesBefore: result.entitiesBefore,
         entitiesAfter: result.entitiesAfter,

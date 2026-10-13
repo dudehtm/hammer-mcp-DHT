@@ -47,7 +47,7 @@ export interface Splice {
  * rewritten behind it.
  *
  * Throws on a range that is backwards, outside the text, or that overlaps another.
- * Zero-length insertions never overlap anything, including each other and the boundary of
+ * Zero-length insertions may share an offset or sit on the boundary of
  * a replaced range -- an insertion at the edge of a deletion is how `reclass.ts` moves a
  * solid to a destination that happens to sit next to it.
  */
@@ -93,6 +93,19 @@ export function applySplices(source: string, splices: readonly Splice[]): string
           `overlap; one edit would land inside the other and the result would depend on ` +
           `which was applied first`,
       );
+    }
+  }
+
+  // Insertions inside a replaced block would disappear or corrupt another edit.
+  // Both lists descend by start; one cursor avoids a quadratic conflict check.
+  let spanIndex = 0;
+  for (const { splice } of ordered) {
+    if (isRange(splice)) continue;
+    while (spanIndex < spans.length && spans[spanIndex]!.start >= splice.start) spanIndex++;
+    const containing = spans[spanIndex];
+    if (containing && containing.end > splice.start) {
+      throw new SpliceError(`insertion at ${splice.start} overlaps replaced range ` +
+        `[${containing.start}, ${containing.end}); conflicting operations reject the whole batch`);
     }
   }
 

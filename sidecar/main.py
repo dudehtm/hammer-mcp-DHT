@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+from time import perf_counter
 from typing import Any, Callable
 
 VERBS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {}
@@ -399,7 +400,15 @@ def main() -> int:
         return 1
 
     try:
-        json.dump(fn(req), sys.stdout)
+        result = fn(req)
+        if name == "search_content":
+            started = perf_counter()
+            encoded = json.dumps(result)
+            serialization_ms = (perf_counter() - started) * 1000
+            sys.stdout.write(encoded)
+            print("HAMMER_MCP_TIMING " + json.dumps({"serializationMs": serialization_ms}), file=sys.stderr)
+        else:
+            json.dump(result, sys.stdout)
     except Exception as exc:  # noqa: BLE001 -- the boundary turns anything into JSON
         traceback.print_exc(file=sys.stderr)
         json.dump(

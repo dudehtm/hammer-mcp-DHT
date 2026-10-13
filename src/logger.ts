@@ -10,6 +10,7 @@ export type AuditKind =
   | "tool_result"
   | "file_write"
   | "vmf_edit"
+  | "content_search"
   | "compile_start"
   | "compile_end"
   | "error";

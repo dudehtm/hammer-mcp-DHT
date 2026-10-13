@@ -24,7 +24,8 @@
  * archive reader, where the entry names come from. Two mechanisms, and unifying the writes
  * here does not fold one into the other.
  */
-import { copyFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import type { Config } from "../config.js";
 import { assertWritable } from "./guard.js";
 
@@ -39,6 +40,8 @@ export interface GuardedWriteOptions {
    * in one place instead of five.
    */
   unchanged?: boolean;
+  /** Replace a disposable index using a sibling temporary file and one rename. */
+  atomic?: boolean;
 }
 
 export interface GuardedWrite {
@@ -65,6 +68,16 @@ export function writeGuarded(
     copyFileSync(target, backupPath);
   }
 
-  writeFileSync(target, text, "utf8");
+  if (options.atomic) {
+    const temporary = assertWritable(`${target}.${randomUUID()}.tmp`, config);
+    try {
+      writeFileSync(temporary, text, { encoding: "utf8", flag: "wx" });
+      renameSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  } else {
+    writeFileSync(target, text, "utf8");
+  }
   return { path: target, written: true, backupPath };
 }

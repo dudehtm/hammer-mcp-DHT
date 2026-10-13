@@ -249,6 +249,7 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
   const appends: string[] = [];
   /** Outputs to add, gathered per entity so one splice serves all of them. */
   const pendingOutputs = new Map<VmfEntity, Array<[string, string]>>();
+  const editedKeys = new Map<VmfEntity, Set<string>>();
   const outcomes: OpOutcome[] = [];
   const warnings: string[] = [];
   let nextId = maxId(nodes);
@@ -296,6 +297,12 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
 
       case "update":
         for (const e of targets) {
+          const keys = editedKeys.get(e) ?? new Set<string>();
+          for (const key of [...(op.unset ?? []), ...Object.keys(op.set ?? {})]) {
+            if (keys.has(key)) throw new VmfEditError(`conflicting updates to ${JSON.stringify(key)} on entity ${e.id ?? e.index}`);
+            keys.add(key);
+          }
+          editedKeys.set(e, keys);
           for (const k of op.unset ?? []) {
             if (k === "id") throw new VmfEditError("update: id cannot be unset");
             removePair(text, e.block, k, splices);
@@ -369,6 +376,8 @@ export function applyVmfOps(text: string, ops: readonly VmfOp[]): VmfEditResult 
     out += appends.join("");
   }
 
+  // Validate the complete batch before the caller can create a backup or write.
+  parse(out);
   return {
     text: out,
     outcomes,

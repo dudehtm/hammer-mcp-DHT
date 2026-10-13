@@ -106,6 +106,7 @@ interface Placement {
 }
 
 function placeSolids(req: Placement, specs: SolidSpec[], ctx: ToolContext) {
+  const started = performance.now();
   const path = resolveVmfInput(req.path, ctx.config);
   const before = readFileSync(path, "utf8");
   const beforeReport = checkVmfSolids(path, before);
@@ -162,6 +163,10 @@ function placeSolids(req: Placement, specs: SolidSpec[], ctx: ToolContext) {
     backup: req.backup,
   });
 
+  ctx.audit.record({ kind: "vmf_edit", data: {
+    path, operation: "place_solids", requested: specs.length, created: created.length,
+    written: write.written, durationMs: performance.now() - started,
+  } });
   return {
     path,
     written: write.written,
@@ -195,7 +200,9 @@ export const writeVmfSolidTool = defineTool({
     "the target block: nothing already in the file moves, comments and formatting included. " +
     "Every solid it writes is passed straight back through read_vmf_solids before the file " +
     "is touched, and the write is refused if any of them fails -- the writer goes volume to " +
-    "planes, the checker goes planes to volume, so neither can hide the other's sign error.",
+    "planes, the checker goes planes to volume, so neither can hide the other's sign error. " +
+    "Group shapes in solids[]: all are verified before a single write and optional backup; " +
+    "any invalid shape rejects the entire batch, including on dryRun.",
   realm: "map",
   guarded: true,
   /**
@@ -207,7 +214,7 @@ export const writeVmfSolidTool = defineTool({
   meta: { "anthropic/requiresUserInteraction": true },
   inputSchema: {
     path: z.string().describe("Path to the .vmf, absolute or relative to the repo root."),
-    solids: z.array(Spec).min(1).describe("Shapes to create, in order."),
+    solids: z.array(Spec).min(1).describe("Shapes to create together in one validated batch. Prefer this to one call per brush."),
     entityId: z
       .number()
       .optional()

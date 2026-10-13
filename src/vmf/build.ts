@@ -38,6 +38,7 @@
  * decision a human makes in Hammer.
  */
 import { parse } from "../kv/parse.js";
+import { assertWritableValue } from "../kv/lex.js";
 import type { KvBlock, KvNode } from "../kv/parse.js";
 import { maxId } from "./edit.js";
 import { planeFromPoints, WORLD_BOUND } from "./solid.js";
@@ -400,6 +401,7 @@ export function buildSolidText(spec: SolidSpec, nextId: number, options: BuildOp
         areaRank: rankOf.get(index)!,
       }) ?? material;
 
+    assertWritableValue("brush material", chosen);
     const { u, v } = textureAxesFor(plane.normal);
     sides.push(
       `\t\tside\n\t\t{\n` +

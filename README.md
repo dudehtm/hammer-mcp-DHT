@@ -135,6 +135,27 @@ would pass the first test just as happily.
 
 ## The checkerboard, before a player finds it
 
+Use `read_game_content` to find installed L4D2 assets before choosing a material or prop.
+Search results are sorted by path and bounded by `offset` and `limit`; `total`, `shown`
+and `truncated` describe the page. Names are returned by default. `details: true` reads
+only the returned materials, including their texture references.
+
+A disposable name index under `stateDir` avoids repeating the full filesystem walk.
+Its identity includes the game profile and real game directory; gameinfo, mount order,
+VPK metadata and nested loose-directory metadata invalidate it. Material details are
+always read live. `rebuildIndex: true` forces a refresh. If an index cannot be written,
+the search still runs. `timings` and the `content_search` audit record report measured
+costs, including mounting, indexing, traversal, filtering, details and serialization.
+See [the measurement](docs/measurements/2026-10-13-content-and-batches.md).
+
+Build groups with `write_vmf_solid.solids[]` and `edit_vmf.ops[]`. Each call validates
+the whole batch before one write and one optional backup; `dryRun: true` validates
+without writing. For example, submit the six shell brushes together, then submit
+`info_player_start`, `info_director` and other point entities together. Entity selectors
+refer to the original VMF: an entity added in a batch can be targeted in a subsequent
+call. Conflicting updates reject the whole batch. This guarantees rejection before
+writing; it does not make two separate calls one transaction.
+
 A missing asset is the only failure on this page a mapper never sees at home — they have the
 files. `read_map_dependencies` resolves every asset a compiled map references and says where
 each will come from: **packed** inside the map, found in the **game**'s own content, or
@@ -454,18 +475,25 @@ none of them.
 `gameinfo.txt` — appid, install directory, mod directory, and **the FGD the game declares**. So
 Counter-Strike: Source lints against `cstrike.fgd` without anyone typing that name.
 
-Only Garry's Mod has actually been run here. Every profile records where each of its values came
+The L4D2 stock compiler chain has been validated natively on Windows. In-game L4D2
+behavior remains unverified. Every profile records where each of its values came
 from and whether a file was read; `health` reports it. See
 [docs/formats.md#game-profiles](docs/formats.md#game-profiles).
 
 ## Tools
+
+The next [L4D2 functional audit](docs/plans/2026-10-13-l4d2-audit-plan.md) follows
+a small map from creation to compilation and packaging, with a coverage matrix for
+all 78 registered tools. It is a plan; the complete audit has not run yet.
+`run_vtf_convert` has an implementation under `src/tools/vtf.ts` but is not registered
+in the MCP. Registration and external converter prerequisites are audit items.
 
 `read_*` observes, `run_*` executes, `verb_noun` mutates. Tools that write or execute are
 **guarded**: they need `confirm: true`, or their name in `toolAllowlist`.
 
 A guarded tool asks permission twice, and the two gates belong to different people.
 `confirm: true` is **ours** — the server refuses without it, and an agent satisfies it by
-itself, which is what makes a destructive call deliberate rather than incidental. Twenty-five
+itself, which is what makes a destructive call deliberate rather than incidental. Twenty-six
 of them also carry `anthropic/requiresUserInteraction`, which is the **client's** gate: it
 asks for a human, and no argument an agent can pass will satisfy it.
 
@@ -501,7 +529,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `sculpt_displacement` | `map` | ● | Flatten, raise, slope or noise — with a seed, so it can be made twice |
 | `paint_displacement` | `map` | ● | The blend channel: uniform, by height, or by slope |
 | `write_portal` | `map` | ● | Areaportals and occluders — the runtime half of visibility |
-| `set_map_properties` | `map` | ● | worldspawn: the sky, the detail sprites, the fog |
+| `set_map_properties` | `map` | ● | worldspawn: sky and detail sprites. Fog belongs to an env_fog_controller entity |
 | `write_vmf_solid` | `map` | ● | Creates brushes — box, wedge, prism, cone, arch, sphere, torus, stairs, or a hull face by face. One material, or one per role: top, bottom, sides |
 | `transform_solids` | `map` | ● | Moves, turns, scales or mirrors brushes already in the file, texture lock included |
 | `delete_solids` | `map` | ● | Removes brushes. The counterpart write_vmf_solid never had |
@@ -538,7 +566,7 @@ holds, and a tool not on the list keeps both gates, which stays the default.
 | `write_vmf` | `map` | ● | Creates an empty `.vmf` — Hammer's File > New. Refuses to overwrite. Checks the `skyname` it writes against the game's own content, and names complete skies the game has when that one is absent |
 | `edit_vmf` | `map` | ● | Edits a `.vmf` by splicing: entities, keyvalues, outputs. Nothing else moves |
 | `run_pakfile_extract` | `map` | ● | Gets files **out** of a compiled map's pakfile — the counterpart `read_pakfile` never had. Refuses an entry that would escape the destination, never overwrites unless told |
-| `run_cubemap2hdr` | `local` | ● | Turns an LDR cubemap into the HDR one Source loads in HDR mode. Refuses anything but DXT1 up front, naming the format the file actually is || `run_vtf_convert` | `local` | ● | Turns a `.tga`/`.png`/`.bmp` into a `.vtf`, and reports the format that actually came out rather than the one asked for. Drives VTFCmd from ficool2's VTFEdit++ |
+| `run_cubemap2hdr` | `local` | ● | Turns an LDR cubemap into the HDR one Source loads in HDR mode. Refuses anything but DXT1 up front, naming the format the file actually is |
 | `run_tga2skybox` | `local` | ● | Builds a cubemap `.vtf` from six TGA faces, LDR **and** HDR — the half of cubemap work that does not need the engine running. Drives ficool2's `tga2skybox` |
 | `run_bsp_rename` | `local` | ● | Renames a compiled `.bsp` **and the content packed inside it** — the nodegraph, cubemap patches, soundscripts. Drives ficool2's `bsp_rename`, a separate download; `health` says whether it is there |
 | `run_compile` | `local` | ● | vbsp, vvis and vrad through the native or Wine backend, findings per stage. Drives the **Hammer++ chain by default where installed**, with its culling flags; falls back to stock and says which chain ran |

@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { contentIndexPath, persistContentIndex } from "../content/index.js";
 import { gameBlock, gameFor } from "../games/resolve.js";
 import { defineTool } from "../mcp/registry.js";
 import { callSidecar } from "../sidecar/client.js";
+import type { SidecarMetrics } from "../sidecar/client.js";
 import { GAME, GAME_BLOCK } from "./paths.js";
 
 export const readGameContentTool = defineTool({
@@ -18,7 +20,9 @@ export const readGameContentTool = defineTool({
     "A .vmt being present is NOT the same as the material drawing: NATURE/BLENDGRASSDIRT01 " +
     "ships with Garry's Mod and the three .vtf it points at do not, which is the same purple " +
     "checkerboard by another route. Pass details to resolve every texture a material names " +
-    "and get `resolves` with what is missing. Needs the Python sidecar; see health.",
+    "and get `resolves` with what is missing. Uses a disposable name index under stateDir, " +
+    "invalidated by mount order, gameinfo, archive and loose-directory metadata. " +
+    "Reports measured timings; rebuildIndex refreshes it explicitly. Needs the Python sidecar; see health.",
   realm: "map",
   inputSchema: {
     pattern: z
@@ -44,6 +48,7 @@ export const readGameContentTool = defineTool({
       .default(0)
       .describe("Stable result offset. Use with limit to page through a broad search."),
     limit: z.number().int().min(1).max(1000).default(100),
+    rebuildIndex: z.boolean().optional().describe("Rebuild the disposable name index under stateDir. Details always read live."),
     game: GAME,
   },
   outputSchema: {
@@ -57,8 +62,11 @@ export const readGameContentTool = defineTool({
     limit: z.number(),
     /** Every match, not only those returned. */
     total: z.number(),
-    shown: z.number().optional(),
-    truncated: z.boolean().optional(),
+    shown: z.number(),
+    truncated: z.boolean(),
+    cache: z.object({ status: z.string(), reason: z.string().nullable(), persisted: z.boolean().optional() }).optional(),
+    timings: z.object({ mountMs: z.number(), indexMs: z.number(), walkMs: z.number(), filterMs: z.number(), detailsMs: z.number(),
+      processMs: z.number(), serializationMs: z.number().nullable(), responseBytes: z.number() }),
     results: z.array(
       z.object({
         path: z.string(),
@@ -92,6 +100,11 @@ export const readGameContentTool = defineTool({
       throw new Error("a search needs a pattern; an empty one would return the whole game");
     }
     const { game, from } = gameFor(ctx.config, args.game);
+    let indexPath: string | null = null;
+    let cacheError: string | null = null;
+    try { indexPath = contentIndexPath(ctx.config, game.id, game.gameDir); }
+    catch (error) { cacheError = error instanceof Error ? error.message : String(error); }
+    let metrics: SidecarMetrics = { processMs: 0, serializationMs: null, responseBytes: 0 };
     const result = (await callSidecar(
       "search_content",
       {
@@ -105,11 +118,29 @@ export const readGameContentTool = defineTool({
         kind: args.kind,
         offset: args.offset,
         limit: args.limit,
+        profile: game.id,
+        indexPath,
+        rebuildIndex: args.rebuildIndex,
         ...(args.details !== undefined ? { details: args.details } : {}),
       },
       ctx.config,
       120_000,
+      value => { metrics = value; },
     )) as Record<string, unknown>;
+    const update = result._indexUpdate;
+    delete result._indexUpdate;
+    const cache = result.cache as { status: string; reason: string | null; persisted?: boolean } | undefined;
+    if (cache && update && indexPath) {
+      try { persistContentIndex(indexPath, update, ctx.config); cache.persisted = true; }
+      catch (error) { cache.persisted = false; cacheError = error instanceof Error ? error.message : String(error); }
+    }
+    if (cache && cacheError) cache.reason = cacheError;
+    result.timings = { ...(result.timings as Record<string, number>), ...metrics };
+    ctx.audit.record({ kind: "content_search", data: {
+      game: game.id, gameDir: game.gameDir, pattern: args.pattern, kind: args.kind,
+      offset: args.offset ?? 0, limit: args.limit, total: result.total, shown: result.shown,
+      cache, timings: result.timings,
+    } });
     return { ...result, game: gameBlock(game, from) };
   },
 });

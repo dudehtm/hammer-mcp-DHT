@@ -40,6 +40,12 @@ interface SidecarFault {
   error?: { kind?: string; message?: string };
 }
 
+export interface SidecarMetrics {
+  processMs: number;
+  serializationMs: number | null;
+  responseBytes: number;
+}
+
 /**
  * Runs one sidecar verb: a fresh subprocess, JSON in, JSON out.
  *
@@ -53,6 +59,7 @@ export async function callSidecar<T>(
   request: unknown,
   config: Config,
   timeoutMs = 120_000,
+  onComplete?: (metrics: SidecarMetrics) => void,
 ): Promise<T> {
   const python = pythonPath(config);
   if (!existsSync(python)) {
@@ -63,6 +70,7 @@ export async function callSidecar<T>(
     );
   }
 
+  const started = performance.now();
   const result = await run(python, [scriptPath(), verb], {
     timeoutMs,
     input: JSON.stringify(request ?? {}),
@@ -93,6 +101,16 @@ export async function callSidecar<T>(
       fault.error.kind ?? "error",
     );
   }
+  let serializationMs: number | null = null;
+  const timing = result.stderr.split(/\r?\n/).find(line => line.startsWith("HAMMER_MCP_TIMING "));
+  if (timing) {
+    try {
+      const value = JSON.parse(timing.slice("HAMMER_MCP_TIMING ".length)).serializationMs;
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) serializationMs = value;
+    } catch { /* Optional telemetry never changes a successful response. */ }
+  }
+  onComplete?.({ processMs: performance.now() - started, serializationMs,
+    responseBytes: Buffer.byteLength(result.stdout) });
   return parsed as T;
 }
 
